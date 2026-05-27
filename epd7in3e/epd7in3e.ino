@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <HTTPClient.h>
+#include <Seeed_GFX.h>
+#include <TFT_eSPI.h>
 #include "epd7in3e.h"
 #include "FS.h"
 #include <ArduinoJson.h>

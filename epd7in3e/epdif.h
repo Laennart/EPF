@@ -9,9 +9,6 @@
 #ifndef EPDIF_H
 #define EPDIF_H
 
-#include <Seeed_GFX.h>
-#include <TFT_eSPI.h>
-
 // EE02 board pin assignments for XIAO ESP32-S3 Plus
 // Source: Seeed_GFX User_Setups/EPaper_Board_Pins_Setups.h
 //         USE_XIAO_EPAPER_DISPLAY_BOARD_EE02 section
