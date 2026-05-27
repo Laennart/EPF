@@ -249,7 +249,7 @@ def depalette_image(pixels, palette):
     indices = np.argmin(diffs, axis=2)
     return indices
 
-def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(255, 255, 255)):
+def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(255, 255, 255), immich_date_raw=None):
     """
     Process image in memory, return BytesIO object
 
@@ -257,26 +257,21 @@ def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(
     :param target_width: width of epaper
     :param target_height: height of epaper
     :param bg_color: background color
-    :param rotation: rotation angle (0, 90, 180, 270)
+    :param immich_date_raw: raw date string from Immich exifInfo.dateTimeOriginal (ISO 8601), or None
     :return: BytesIO object
     """
 
     # Update the angle
     rotation = rotationAngle
 
-    # Get data from EXIF
+    # Extract EXIF date from local image as fallback (DO-01 local path)
+    date_time_raw = None
     try:
         exif = image._getexif()
         if exif:
-            # EXIF time tag is 36867
-            date_time = exif.get(36867)
-            if not date_time:
-                # Alternative time tag is 306
-                date_time = exif.get(306)
-        else:
-            date_time = None
-    except:
-        date_time = None
+            date_time_raw = exif.get(36867) or exif.get(306)
+    except (AttributeError, Exception):
+        date_time_raw = None
 
     # Read correct photo orientation from EXIF
     image = ImageOps.exif_transpose(image)
@@ -289,7 +284,7 @@ def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(
     # Enhance color and contrast
     enhanced_img = ImageEnhance.Color(img).enhance(img_enhanced)
     enhanced_img = ImageEnhance.Contrast(enhanced_img).enhance(img_contrast)
-    
+
     # Palette definition (Seeed T133A01 color primaries)
     palette = [
         0, 0, 0,           # Black
@@ -299,7 +294,7 @@ def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(
         0, 76, 255,        # Blue (Seeed)
         29, 185, 84,       # Green (Seeed)
     ]
-    
+
     # Prepare palette image (similar to previous code)
     e = len(palette)
     assert e > 0, "Palette unexpectedly short"
@@ -308,127 +303,31 @@ def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(
 
     # Create temporary palette image
     pal_image = Image.new("P", (1, 1))
-    
+
     # Zero-pad palette to 768 values
     palette += (768 - e) * [0]
     pal_image.putpalette(palette)
-    
+
     # Quantize image
     # output_img = enhanced_img.convert("RGB").quantize(
     #     palette=pal_image,
     #     dither=Image.Dither.FLOYDSTEINBERG
     # ).convert("RGB")
-    
+
     output_img = convert_image(enhanced_img, dithering_strength=strength)
     output_img = Image.fromarray(output_img, mode="RGB")
-    
-    # output_img.paste(quantized_img, (paste_x, paste_y))
-    
-    # Add date if available
-    if date_time:
-        draw = ImageDraw.Draw(output_img)
-        try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
-        except:
-            font = ImageFont.load_default()
-        
-        # Format the date
-        try:
-            try:
-                dt = datetime.strptime(date_time, "%Y:%m:%d %H:%M:%S")
-                formatted_time = dt.strftime("%Y/%m/%d")
-            except ValueError:
-                dt = datetime.strptime(date_time, "%Y.%m.%d")
-                formatted_time = dt.strftime("%Y/%m/%d")
-        except:
-            formatted_time = date_time
 
-        def draw_text_with_background(draw, text, font, text_color=(255, 255, 255), bg_color=(0, 0, 0)):
-            # Calculate rotated width/height
-            if rotation in [90, 270]:
-                img_width, img_height = target_height, target_width  # width and height swapped
-            else:
-                img_width, img_height = target_width, target_height
-        
-            # Set text position
-            if rotation == 0:  # no rotation
-                position = (img_width - 200, img_height - 40)
-            elif rotation == 90:  # 90 degrees clockwise (actually counterclockwise)
-                position = (img_height - 30, 30)
-            elif rotation == 180:  # 180 degrees
-                position = (img_width -200 , img_height - 40)
-            elif rotation == 270:  # 270 degrees clockwise (actually counterclockwise)
-                position = (30, img_width - 30)
-        
-            # Get text bounding box
-            text_bbox = draw.textbbox((0, 0), text, font=font)  # use (0, 0) to get text size
-            text_width = text_bbox[2] - text_bbox[0]
-            text_height = text_bbox[3] - text_bbox[1]
-            padding = 5
-        
-            # Set text position and background rectangle bounds
-            if rotation == 0:  # no rotation, bottom right
-                position = (img_width - text_width - 40, img_height - text_height - 40)
-                rect_coords = [
-                    position[0] - padding,  # Top left X
-                    position[1] - padding,  # Top left Y
-                    position[0] + text_width + padding,  # Bottom right X
-                    position[1] + text_height + padding  # Bottom right Y
-                ]
-            elif rotation == 90:  # 90 degrees, top right
-                position = (img_height - text_height - 40, 40)
-                rect_coords = [
-                    position[0] - padding,  # Top left X
-                    position[1] - padding,  # Top left Y
-                    position[0] + text_height + padding,  # Bottom right X
-                    position[1] + text_width + padding   # Bottom right Y
-                ]
-            elif rotation == 180:  # 180 degrees, top left
-                position = (40, 40)
-                rect_coords = [
-                    position[0] - padding,  # Top left X
-                    position[1] - padding,  # Top left Y
-                    position[0] + text_width + padding,  # Bottom right X
-                    position[1] + text_height + padding  # Bottom right Y
-                ]
-            elif rotation == 270:  # 270 degrees, bottom left
-                position = (40, img_width - text_width - 40)
-                rect_coords = [
-                    position[0] - padding,  # Top left X
-                    position[1] - padding,  # Top left Y
-                    position[0] + text_height + padding,  # Bottom right X
-                    position[1] + text_width + padding   # Bottom right Y
-                ]
-            
-            # Draw rectangular background
-            draw.rectangle(rect_coords, fill=bg_color)
-        
-            # Create text based on the rotation of image
-            if rotation == 0:
-                draw.text(position, text, fill=text_color, font=font)
-            else:
-                # Create a new image to draw rotated text
-                rotated_text = Image.new("RGB", (text_width, text_height), (255, 255, 255))  # white background
-                rotated_draw = ImageDraw.Draw(rotated_text)
-                rotated_draw.text((0, 0), text, fill=text_color, font=font)
-                
-                # Rotate text image
-                rotated_text = rotated_text.rotate(rotation, expand=True, resample=Image.BICUBIC)
-                
-                # Calculate where rotated text should be pasted
-                if rotation == 90:
-                    # 90 degree rotation, display in top right
-                    output_img.paste(rotated_text, (position[1], position[0]))
-                elif rotation == 180:
-                    # 180 degree rotation, display in top left
-                    output_img.paste(rotated_text, (position[0], position[1]))
-                elif rotation == 270:
-                    # 270 degree rotation, display in bottom left
-                    output_img.paste(rotated_text, (position[1], position[0]))
-                
-        # Drawing the text on forground (WIP)
-        # draw_text_with_background(draw, formatted_time, font)
-    
+    # Date overlay (DO-01 + DO-02 + DO-03 + DO-04). Off by default (D-01); silently hidden when no date (D-03).
+    if date_overlay_enabled:
+        date_str = parse_photo_date(immich_date_raw) or parse_photo_date(date_time_raw)
+        if date_str:
+            try:
+                font = ImageFont.truetype(
+                    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
+            except (IOError, OSError):
+                font = ImageFont.load_default()
+            draw_date_overlay(output_img, date_str, font, date_overlay_position, padding=6)
+
     # Save image into ram
     img_io = io.BytesIO()
     output_img.save(img_io, 'BMP')
@@ -863,7 +762,8 @@ def serve_immich_image():
     else:
         image = Image.open(image_data)
 
-    processed_image = scale_img_in_memory(image)
+    immich_date_raw = selected_image.get('exifInfo', {}).get('dateTimeOriginal')
+    processed_image = scale_img_in_memory(image, immich_date_raw=immich_date_raw)
     processed_image.seek(0)
     c_code = convert_to_c_code_in_memory(Image.open(processed_image))
 
