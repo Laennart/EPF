@@ -78,14 +78,15 @@ ALLOWED_EXTENSIONS = {'.jpeg', '.raw', '.jpg', '.bmp', '.dng', '.heic', '.arw', 
 os.makedirs(photodir, exist_ok=True)
 register_heif_opener()
 
-# Palltte only for WaveShare 7.5inch Spectra-E6 e-Paper
+# Seeed T133A01 color primaries (from Seeed_GFX dither.cpp kE6Rgb table)
+# Order: black, white, yellow, red, blue, green
 palette = [
-    (0, 0, 0),
-    (255, 255, 255),
-    (255, 243, 56),
-    (191, 0, 0),
-    (100, 64, 255),
-    (67, 138, 28)
+    (0, 0, 0),       # index 0 → T133A01 nibble 0xF (black)
+    (255, 255, 255),  # index 1 → T133A01 nibble 0x0 (white)
+    (255, 216, 0),    # index 2 → T133A01 nibble 0xB (yellow)
+    (229, 57, 53),    # index 3 → T133A01 nibble 0x6 (red)
+    (0, 76, 255),     # index 4 → T133A01 nibble 0xD (blue)
+    (29, 185, 84),    # index 5 → T133A01 nibble 0x2 (green)
 ]
 
 last_battery_voltage = 0
@@ -163,10 +164,9 @@ def depalette_image(pixels, palette):
     palette_array = np.array(palette)
     diffs = np.sqrt(np.sum((pixels[:, :, None, :] - palette_array[None, None, :, :]) ** 2, axis=3))
     indices = np.argmin(diffs, axis=2)
-    indices[indices > 3] += 1  # Simulate the code from the C
     return indices
 
-def scale_img_in_memory(image, target_width=800, target_height=480, bg_color=(255, 255, 255)):
+def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(255, 255, 255)):
     """
     Process image in memory, return BytesIO object
 
@@ -207,14 +207,14 @@ def scale_img_in_memory(image, target_width=800, target_height=480, bg_color=(25
     enhanced_img = ImageEnhance.Color(img).enhance(img_enhanced)
     enhanced_img = ImageEnhance.Contrast(enhanced_img).enhance(img_contrast)
     
-    # Palette definition (matching previous quantization logic)
+    # Palette definition (Seeed T133A01 color primaries)
     palette = [
-        0, 0, 0,         # Black
-        255, 255, 255,   # White
-        255, 255, 0,    # Yellow
-        255, 0, 0,       # Deep Red
-        0, 0, 255,    # Blue
-        0, 255, 0      # Green
+        0, 0, 0,           # Black
+        255, 255, 255,     # White
+        255, 216, 0,       # Yellow (Seeed)
+        229, 57, 53,       # Red (Seeed)
+        0, 76, 255,        # Blue (Seeed)
+        29, 185, 84,       # Green (Seeed)
     ]
     
     # Prepare palette image (similar to previous code)
@@ -353,36 +353,37 @@ def scale_img_in_memory(image, target_width=800, target_height=480, bg_color=(25
     return img_io
 
 def convert_to_c_code_in_memory(image_data):
-    """ Convert image to C code in memory """
-    # Convert image data to numpy array
+    """ Convert image to C code in memory — T133A01 nibble encoding """
     pixels = np.array(image_data)
-    
-    # Process palette
+
+    # Nearest-neighbor palette quantization
     indices = depalette_image(pixels, palette)
-    
-    # Compress pixels
+
+    # T133A01 nibble codes indexed by palette position:
+    # palette[0]=black→0xF, [1]=white→0x0, [2]=yellow→0xB,
+    # [3]=red→0x6, [4]=blue→0xD, [5]=green→0x2
+    nibble_map = [0xF, 0x0, 0xB, 0x6, 0xD, 0x2]
+
     height, width = indices.shape
     bytes_array = [
-        (indices[y, x] << 4) | indices[y, x + 1] if x + 1 < width else (indices[y, x] << 4)
+        (nibble_map[indices[y, x]] << 4) | nibble_map[indices[y, x + 1]]
+        if x + 1 < width
+        else (nibble_map[indices[y, x]] << 4)
         for y in range(height)
         for x in range(0, width, 2)
     ]
-    
-    # Generate C code
-    output = io.StringIO()
 
+    # Generate hex CSV output
+    output = io.StringIO()
     for i, byte_value in enumerate(bytes_array):
         output.write(f"{byte_value:02X},")
         if (i + 1) % 16 == 0:
             output.write("\n")
-    
     output.write("};\n")
-    
-    # Convert output to bytes
+
     result = output.getvalue().encode('utf-8')
     output_bytes = io.BytesIO(result)
     output_bytes.seek(0)
-    
     return output_bytes
 
 def convert_raw_or_dng_to_jpg(input_file_path, output_dir):
