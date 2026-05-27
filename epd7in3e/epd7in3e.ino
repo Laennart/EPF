@@ -313,6 +313,16 @@ public:
     pinMode(CONFIG_PIN, INPUT_PULLUP);
 
     epaper.begin();
+
+    // Re-create sprite buffer here (PSRAM is guaranteed available at this point).
+    // The EPaper global constructor runs before PSRAM is set up if PSRAM board option
+    // is disabled, leaving _img8 = null and causing a crash on update().
+    epaper.deleteSprite();
+    if (!epaper.createSprite(EPD_WIDTH, EPD_HEIGHT)) {
+      Serial.println(F("ERROR: EPaper sprite allocation failed — enable PSRAM in board settings"));
+      Serial.println(F("  Arduino IDE > Tools > PSRAM > OPI PSRAM"));
+      return false;
+    }
     Serial.println(F("e-Paper initialized successfully (Seeed_GFX)"));
 
     // initialize spiffs
