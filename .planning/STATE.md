@@ -1,0 +1,35 @@
+---
+status: active
+current_phase: "02"
+current_phase_name: date-overlay
+last_completed_phase: "01"
+last_activity: 2026-05-27
+---
+
+# Project State
+
+## Current Position
+
+**Active Phase:** 02 — date-overlay
+**Status:** In progress
+**Plans:** 3 total, 3 incomplete
+
+## Phase 1 Complete
+
+Phase 01 (hardware-port) completed all 3 plans:
+- 01-01: WaveShare → EE02 pin constants / Seeed_GFX headers
+- 01-02: Seeed_GFX API, PSRAM frame buffer, sleep API fixes
+- 01-03: Server palette (T133A01 colors), nibble map, 1200×1600 resolution
+
+## Phase 2 Plan Status
+
+| Plan | Name | Status |
+|------|------|--------|
+| 02-01 | pytest infra + 9 failing test stubs | complete |
+| 02-02 | parse_photo_date() + draw_date_overlay() helpers | pending |
+| 02-03 | Wire overlay into pipeline + settings UI | pending |
+
+## Key Decisions
+
+- Test contracts locked before implementation: parse_photo_date signature, draw_date_overlay signature, DEFAULT_CONFIG keys (02-01)
+- dejavu_or_default_font fixture falls back to PIL default when DejaVuSans not available (macOS compatibility) (02-01)
