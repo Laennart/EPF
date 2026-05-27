@@ -135,3 +135,93 @@ def test_default_config():
         "date_overlay_enabled must default to False (D-01)"
     assert DEFAULT_CONFIG["immich"].get("date_overlay_position") == "bottomRight", \
         "date_overlay_position must default to 'bottomRight' (D-05)"
+
+
+# --- Rotation-aware overlay (bug fix: rotation parameter) -------------------
+
+def test_rotation_0_bottomright(large_rgb_image, dejavu_or_default_font):
+    """rotation=0: bottomRight still appears in bottom-right buffer region (no remapping)."""
+    from app import draw_date_overlay
+    draw_date_overlay(large_rgb_image, "05.01.2022",
+                      dejavu_or_default_font, "bottomRight", padding=6, rotation=0)
+    w, h = large_rgb_image.size
+    found = any(
+        large_rgb_image.getpixel((x, y)) == (0, 0, 0)
+        for x in range(w - 120, w) for y in range(h - 60, h)
+    )
+    assert found, "rotation=0: expected black pixel in bottom-right region"
+    top_left_black = any(
+        large_rgb_image.getpixel((x, y)) == (0, 0, 0)
+        for x in range(0, 120) for y in range(0, 60)
+    )
+    assert not top_left_black, "rotation=0: did not expect overlay in top-left"
+
+
+def test_rotation_90_bottomright_maps_to_buffer_topright(large_rgb_image, dejavu_or_default_font):
+    """rotation=90: viewer's bottomRight maps to buffer's top-right region.
+
+    load_scaled rotates image 90° CCW. The viewer perceives a transposed canvas
+    (H×W = 1600×1200 in viewer space). After rotating the viewer canvas 90° CCW
+    into buffer space, the viewer's bottomRight corner lands at the buffer's top-right.
+    """
+    from app import draw_date_overlay
+    draw_date_overlay(large_rgb_image, "05.01.2022",
+                      dejavu_or_default_font, "bottomRight", padding=6, rotation=90)
+    w, h = large_rgb_image.size  # 1200x1600
+    # Viewer's bottomRight → buffer topRight (x near W=1200, y near 0)
+    found = any(
+        large_rgb_image.getpixel((x, y)) == (0, 0, 0)
+        for x in range(w - 120, w) for y in range(0, 60)
+    )
+    assert found, "rotation=90: expected black pixel in buffer top-right region (viewer's bottomRight)"
+    # Must NOT appear in buffer's bottom-right (viewer's top-left for this rotation)
+    buffer_bottomright_black = any(
+        large_rgb_image.getpixel((x, y)) == (0, 0, 0)
+        for x in range(w - 120, w) for y in range(h - 60, h)
+    )
+    assert not buffer_bottomright_black, "rotation=90: overlay must NOT be in buffer's bottom-right"
+
+
+def test_rotation_180_bottomright_maps_to_buffer_topleft(large_rgb_image, dejavu_or_default_font):
+    """rotation=180: viewer's bottomRight maps to buffer's top-left region."""
+    from app import draw_date_overlay
+    draw_date_overlay(large_rgb_image, "05.01.2022",
+                      dejavu_or_default_font, "bottomRight", padding=6, rotation=180)
+    # Viewer's bottomRight → buffer topLeft (x near 0, y near 0)
+    found = any(
+        large_rgb_image.getpixel((x, y)) == (0, 0, 0)
+        for x in range(0, 120) for y in range(0, 60)
+    )
+    assert found, "rotation=180: expected black pixel in buffer top-left region (viewer's bottomRight)"
+    w, h = large_rgb_image.size
+    buffer_bottomright_black = any(
+        large_rgb_image.getpixel((x, y)) == (0, 0, 0)
+        for x in range(w - 120, w) for y in range(h - 60, h)
+    )
+    assert not buffer_bottomright_black, "rotation=180: overlay must NOT be in buffer's bottom-right"
+
+
+def test_rotation_270_bottomright_maps_to_buffer_bottomleft(large_rgb_image, dejavu_or_default_font):
+    """rotation=270 (default config): viewer's bottomRight maps to buffer's bottom-left region.
+
+    This is the critical regression test for the default rotationAngle=270 configuration.
+    The viewer's perceived bottomRight must appear at the buffer's bottom-left so that
+    the physical display (mounted to compensate for the 270° CCW rotation) shows the
+    overlay at the viewer's bottom-right corner.
+    """
+    from app import draw_date_overlay
+    draw_date_overlay(large_rgb_image, "05.01.2022",
+                      dejavu_or_default_font, "bottomRight", padding=6, rotation=270)
+    w, h = large_rgb_image.size  # 1200x1600
+    # Viewer's bottomRight → buffer bottomLeft (x near 0, y near H=1600)
+    found = any(
+        large_rgb_image.getpixel((x, y)) == (0, 0, 0)
+        for x in range(0, 120) for y in range(h - 60, h)
+    )
+    assert found, "rotation=270: expected black pixel in buffer bottom-left region (viewer's bottomRight)"
+    # Must NOT appear in buffer's bottom-right (viewer's top-left for this rotation)
+    buffer_bottomright_black = any(
+        large_rgb_image.getpixel((x, y)) == (0, 0, 0)
+        for x in range(w - 120, w) for y in range(h - 60, h)
+    )
+    assert not buffer_bottomright_black, "rotation=270: overlay must NOT be in buffer's bottom-right"

@@ -87,32 +87,60 @@ POSITIONS = {
 }
 
 
-def draw_date_overlay(output_img, text, font, position_str, padding=6):
+def draw_date_overlay(output_img, text, font, position_str, padding=6, rotation=0):
     """Draw white text on a solid black background rectangle at position_str.
 
-    Mutates output_img in place. Used after the dithering pipeline so the image
-    is already in its final visible orientation — rotation is NOT considered.
+    Accounts for display rotation so that position_str refers to the viewer's
+    visual corner (e.g. 'bottomRight' always appears at the viewer's bottom-right
+    regardless of rotationAngle), and text is rendered upright from the viewer's
+    perspective.
 
     Args:
-        output_img: PIL.Image (RGB mode).
-        text:       String to render (e.g. '05.01.2022').
-        font:       PIL ImageFont instance.
+        output_img:   PIL.Image (RGB mode). Mutated in place.
+        text:         String to render (e.g. '05.01.2022').
+        font:         PIL ImageFont instance.
         position_str: One of POSITIONS keys; unknown values fall back to 'bottomRight'.
-        padding:    Pixels of black background around the text on all sides.
+        padding:      Pixels of black background around the text on all sides.
+        rotation:     Display rotation angle in degrees (0, 90, 180, 270).
+                      Must match the rotationAngle used by load_scaled so that
+                      the overlay is placed correctly in viewer space.
     """
-    draw = ImageDraw.Draw(output_img)
-    bbox = draw.textbbox((0, 0), text, font=font)
-    # bbox is (left, top, right, bottom); width/height are deltas
+    bw, bh = output_img.size  # buffer dimensions (always 1200x1600)
+
+    # Viewer canvas dimensions depend on rotation: 90° and 270° CCW transpose W and H.
+    if rotation in (90, 270):
+        vw, vh = bh, bw  # viewer perceives a transposed (landscape) display
+    else:
+        vw, vh = bw, bh  # viewer perceives same dimensions as buffer
+
+    # --- Step 1: measure text in viewer space ---
+    _probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    bbox = _probe.textbbox((0, 0), text, font=font)
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
-    w, h = output_img.size
+
+    # --- Step 2: compute overlay position in viewer space ---
     get_xy = POSITIONS.get(position_str, POSITIONS["bottomRight"])
-    x, y = get_xy(w, h, tw, th, padding)
-    # Background rectangle: extend by padding on all sides
+    x, y = get_xy(vw, vh, tw, th, padding)
+
+    # --- Step 3: draw upright text on a viewer-oriented RGBA canvas ---
+    viewer_canvas = Image.new("RGBA", (vw, vh), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(viewer_canvas)
     rect = [x - padding, y - padding, x + tw + padding, y + th + padding]
-    draw.rectangle(rect, fill=(0, 0, 0))
-    # Compensate for non-zero bbox offsets (Pillow >= 9.2 default font quirk)
-    draw.text((x - bbox[0], y - bbox[1]), text, fill=(255, 255, 255), font=font)
+    draw.rectangle(rect, fill=(0, 0, 0, 255))
+    draw.text((x - bbox[0], y - bbox[1]), text, fill=(255, 255, 255, 255), font=font)
+
+    # --- Step 4: rotate viewer canvas into buffer orientation ---
+    # load_scaled rotated the image content by `rotation`° CCW; apply the same
+    # rotation to the overlay canvas so it lands in the matching buffer location.
+    if rotation != 0:
+        viewer_canvas = viewer_canvas.rotate(rotation, expand=True)
+
+    # --- Step 5: paste overlay onto output_img using alpha mask ---
+    # viewer_canvas is now buffer-sized; paste only where alpha > 0.
+    overlay_rgb = viewer_canvas.convert("RGB")
+    mask = viewer_canvas.split()[3]  # alpha channel as mask
+    output_img.paste(overlay_rgb, mask=mask)
 
 
 current_config = DEFAULT_CONFIG.copy()
@@ -326,7 +354,8 @@ def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(
                     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
             except (IOError, OSError):
                 font = ImageFont.load_default()
-            draw_date_overlay(output_img, date_str, font, date_overlay_position, padding=6)
+            draw_date_overlay(output_img, date_str, font, date_overlay_position,
+                              padding=6, rotation=rotation)
 
     # Save image into ram
     img_io = io.BytesIO()
