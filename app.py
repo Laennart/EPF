@@ -574,6 +574,8 @@ def settings():
                 'sleep_end_hour': int(request.form.get('sleep_end_hour', current_config['immich']['sleep_end_hour'])),
                 'sleep_end_minute': int(request.form.get('sleep_end_minute', current_config['immich']['sleep_end_minute'])),
                 'wakeup_interval': int(request.form.get('wakeup_interval', current_config['immich']['wakeup_interval'])),
+                'date_overlay_enabled': request.form.get('date_overlay_enabled', 'off') == 'on',
+                'date_overlay_position': request.form.get('date_overlay_position', 'bottomRight'),
             }
         }
         
