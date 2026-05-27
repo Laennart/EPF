@@ -1,7 +1,6 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <HTTPClient.h>
-#include <Seeed_GFX.h>
 #include <TFT_eSPI.h>
 #include "epd7in3e.h"
 #include "FS.h"
@@ -33,7 +32,7 @@ class EpaperManager
 {
 private:
   // SimpleWiFiManager wifiManager;
-  TFT_eSPI epaper;
+  EPaper epaper;
   String imageUrl = "";
 
   bool downloadImage()
