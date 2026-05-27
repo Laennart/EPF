@@ -70,6 +70,49 @@ def parse_photo_date(raw_str):
     return None
 
 
+# 9-position anchor lookup for date overlay (DO-04).
+# Each lambda returns (x, y) of the text's top-left given image w/h, text bbox w/h, and padding.
+POSITIONS = {
+    "topLeft":      lambda w, h, tw, th, p: (p, p),
+    "topCenter":    lambda w, h, tw, th, p: ((w - tw) // 2, p),
+    "topRight":     lambda w, h, tw, th, p: (w - tw - p, p),
+    "centerLeft":   lambda w, h, tw, th, p: (p, (h - th) // 2),
+    "center":       lambda w, h, tw, th, p: ((w - tw) // 2, (h - th) // 2),
+    "centerRight":  lambda w, h, tw, th, p: (w - tw - p, (h - th) // 2),
+    "bottomLeft":   lambda w, h, tw, th, p: (p, h - th - p),
+    "bottomCenter": lambda w, h, tw, th, p: ((w - tw) // 2, h - th - p),
+    "bottomRight":  lambda w, h, tw, th, p: (w - tw - p, h - th - p),
+}
+
+
+def draw_date_overlay(output_img, text, font, position_str, padding=6):
+    """Draw white text on a solid black background rectangle at position_str.
+
+    Mutates output_img in place. Used after the dithering pipeline so the image
+    is already in its final visible orientation — rotation is NOT considered.
+
+    Args:
+        output_img: PIL.Image (RGB mode).
+        text:       String to render (e.g. '05.01.2022').
+        font:       PIL ImageFont instance.
+        position_str: One of POSITIONS keys; unknown values fall back to 'bottomRight'.
+        padding:    Pixels of black background around the text on all sides.
+    """
+    draw = ImageDraw.Draw(output_img)
+    bbox = draw.textbbox((0, 0), text, font=font)
+    # bbox is (left, top, right, bottom); width/height are deltas
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    w, h = output_img.size
+    get_xy = POSITIONS.get(position_str, POSITIONS["bottomRight"])
+    x, y = get_xy(w, h, tw, th, padding)
+    # Background rectangle: extend by padding on all sides
+    rect = [x - padding, y - padding, x + tw + padding, y + th + padding]
+    draw.rectangle(rect, fill=(0, 0, 0))
+    # Compensate for non-zero bbox offsets (Pillow >= 9.2 default font quirk)
+    draw.text((x - bbox[0], y - bbox[1]), text, fill=(255, 255, 255), font=font)
+
+
 current_config = DEFAULT_CONFIG.copy()
 
 # Initialize configuration
