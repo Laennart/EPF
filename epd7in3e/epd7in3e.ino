@@ -278,50 +278,10 @@ private:
   // Enter deep sleep mode with calculated wake-up interval
   void hibernate(int sleepDuration = 0)
   {
-    Serial.println("Preparing for deep sleep...");
-
-    // Use provided sleep duration or get default from WiFi manager
-    // int sleep_interval = sleepDuration > 0 ? sleepDuration : wifiManager.getServerSleepDuration();
-    int sleep_interval = sleepDuration > 0 ? sleepDuration : 86400;
-
-    // Disconnect WiFi and turn off radio
-    WiFi.disconnect(true);
-    WiFi.mode(WIFI_OFF);
-    fs_deinit();
-    delay(50);
-    // Print sleep duration for debugging
-    Serial.printf("Sleep interval: %d seconds\n", sleep_interval);
-
-    // Convert sleep time to microseconds
-    uint64_t sleep_time;
-    if (sleep_interval > 0)
-    {
-      sleep_time = static_cast<uint64_t>(sleep_interval) * 1000000ULL;
-    }
-    else
-    {
-      sleep_time = static_cast<uint64_t>(SLEEP_INTERVAL) * 1000000ULL;
-    }
-
-    Serial.printf("Sleep time in microseconds: %llu\n", sleep_time);
-
-    // Configure wake up sources
-    esp_sleep_enable_timer_wakeup(sleep_time);
-
-    // Configure GPIO wake up (IDF v5 / ESP32-S3 API)
-    esp_sleep_enable_ext1_wakeup_io(1ULL << WAKEUP_PIN, ESP_EXT1_WAKEUP_ANY_LOW);
-    rtc_gpio_pullup_en(WAKEUP_PIN);
-    rtc_gpio_pulldown_dis(WAKEUP_PIN);
-
-    // Wait for serial output to complete
-    Serial.println("Entering deep sleep mode...");
-    Serial.flush();
-
-    // Add delay before sleep
-    delay(50);
-
-    // Enter deep sleep
-    esp_deep_sleep_start();
+    // TODO: re-enable deep sleep once battery is connected
+    Serial.printf("hibernate() skipped (no battery) — would sleep %d s\n",
+                  sleepDuration > 0 ? sleepDuration : (int)SLEEP_INTERVAL);
+    return;
   }
 
   static void resetDeviceCredentials(void)
