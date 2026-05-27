@@ -45,6 +45,31 @@ DEFAULT_CONFIG = {
     }
 }
 
+def parse_photo_date(raw_str):
+    """Return 'DD.MM.YYYY' string from a date input, or None if unparseable.
+
+    Accepts:
+      - EXIF format: 'YYYY:MM:DD HH:MM:SS'   (PIL exif tag 36867)
+      - ISO 8601:   'YYYY-MM-DDTHH:MM:SS.sssZ' or 'YYYY-MM-DD...'  (Immich exifInfo.dateTimeOriginal)
+    Returns None for None, empty string, or unparseable input.
+    """
+    if not raw_str or not isinstance(raw_str, str) or len(raw_str) < 10:
+        return None
+    # EXIF format: separator is ':' at index 4
+    if raw_str[4] == ':':
+        try:
+            return datetime.strptime(raw_str[:10], "%Y:%m:%d").strftime("%d.%m.%Y")
+        except ValueError:
+            return None
+    # ISO 8601: separator is '-' at index 4
+    if raw_str[4] == '-':
+        try:
+            return datetime.strptime(raw_str[:10], "%Y-%m-%d").strftime("%d.%m.%Y")
+        except ValueError:
+            return None
+    return None
+
+
 current_config = DEFAULT_CONFIG.copy()
 
 # Initialize configuration
