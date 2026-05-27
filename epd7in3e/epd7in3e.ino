@@ -416,6 +416,10 @@ EpaperManager epaperManager;
 
 void setup()
 {
+  Serial.begin(115200);
+  delay(3000); // wait for USB-CDC serial monitor to connect
+  Serial.println("\n\n=== EPF booting ===");
+  Serial.println("Hello World!");
   // Determine wake up reason
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
 
