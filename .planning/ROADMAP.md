@@ -9,6 +9,6 @@
 **Plans:** 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Replace WaveShare driver headers with EE02 pin constants and Seeed_GFX includes
+- [x] 01-01-PLAN.md — Replace WaveShare driver headers with EE02 pin constants and Seeed_GFX includes
 - [ ] 01-02-PLAN.md — Rewrite main .ino: Seeed_GFX API, PSRAM frame buffer, remove battery guard, fix sleep API
-- [ ] 01-03-PLAN.md — Update server palette (T133A01 colors), nibble map, and 1200x1600 resolution
+- [x] 01-03-PLAN.md — Update server palette (T133A01 colors), nibble map, and 1200x1600 resolution
