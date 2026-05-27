@@ -42,6 +42,8 @@ DEFAULT_CONFIG = {
         'sleep_end_hour': 6,            # Sleep end time 6:00 (6:00 AM)
         'sleep_end_minute': 0,          # Sleep end time 6:00 (6:00 AM)
         'wakeup_interval': 60,          # Default 60 minutes (1 hour)
+        'date_overlay_enabled': False,  # D-01: overlay off by default
+        'date_overlay_position': 'bottomRight',  # D-05: default position
     }
 }
 
@@ -128,6 +130,8 @@ sleep_start_hour = DEFAULT_CONFIG['immich']['sleep_start_hour']
 sleep_start_minute = DEFAULT_CONFIG['immich']['sleep_start_minute']
 sleep_end_hour = DEFAULT_CONFIG['immich']['sleep_end_hour']
 sleep_end_minute = DEFAULT_CONFIG['immich']['sleep_end_minute']
+date_overlay_enabled = DEFAULT_CONFIG['immich']['date_overlay_enabled']
+date_overlay_position = DEFAULT_CONFIG['immich']['date_overlay_position']
 
 # Retrieve environment variables with error handling
 apikey = os.getenv('IMMICH_API_KEY')
@@ -540,7 +544,7 @@ class ConfigFileHandler(FileSystemEventHandler):
     
 def update_app_config(new_config):
     """ Update global configuration and Flask application configuration """
-    global current_config, url, albumname, rotationAngle, img_enhanced, img_contrast, strength, display_mode, image_order, sleep_start_hour, sleep_end_hour, sleep_start_minute, sleep_end_minute
+    global current_config, url, albumname, rotationAngle, img_enhanced, img_contrast, strength, display_mode, image_order, sleep_start_hour, sleep_end_hour, sleep_start_minute, sleep_end_minute, date_overlay_enabled, date_overlay_position
     
     current_config = new_config
     
@@ -572,7 +576,9 @@ def update_app_config(new_config):
     sleep_end_hour = new_config['immich']['sleep_end_hour']
     sleep_start_minute = new_config['immich']['sleep_start_minute']
     sleep_end_minute = new_config['immich']['sleep_end_minute']
-    
+    date_overlay_enabled = new_config['immich'].get('date_overlay_enabled', False)
+    date_overlay_position = new_config['immich'].get('date_overlay_position', 'bottomRight')
+
     print(f"Configuration updated: URL = {url}, Album = {albumname}, angle = {rotationAngle}, enhance = {img_enhanced}, contrast = {img_contrast}, strength = {strength}, display_mode = {display_mode}, image_order = {image_order}")
 
 def start_config_watcher(config_path):
