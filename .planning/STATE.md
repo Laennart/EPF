@@ -12,7 +12,7 @@ last_activity: 2026-05-27
 
 **Active Phase:** 02 — date-overlay
 **Status:** In progress
-**Plans:** 3 total, 3 incomplete
+**Plans:** 3 total, 1 incomplete
 
 ## Phase 1 Complete
 
@@ -26,10 +26,13 @@ Phase 01 (hardware-port) completed all 3 plans:
 | Plan | Name | Status |
 |------|------|--------|
 | 02-01 | pytest infra + 9 failing test stubs | complete |
-| 02-02 | parse_photo_date() + draw_date_overlay() helpers | pending |
+| 02-02 | parse_photo_date() + draw_date_overlay() helpers | complete |
 | 02-03 | Wire overlay into pipeline + settings UI | pending |
 
 ## Key Decisions
 
 - Test contracts locked before implementation: parse_photo_date signature, draw_date_overlay signature, DEFAULT_CONFIG keys (02-01)
 - dejavu_or_default_font fixture falls back to PIL default when DejaVuSans not available (macOS compatibility) (02-01)
+- parse_photo_date uses char at index 4 to distinguish EXIF ':' from ISO '-' format (02-02)
+- bbox offset compensation (x - bbox[0], y - bbox[1]) applied on draw.text() for Pillow >= 9.2 compatibility (02-02)
+- Unknown position_str falls back to POSITIONS["bottomRight"] via .get() default (02-02)
