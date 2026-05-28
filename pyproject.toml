@@ -1,7 +1,7 @@
 [tool.ruff]
 line-length = 120
 target-version = "py39"
-extend-exclude = ["cpy.pyx", "cpy.c", "tests/conftest.py"]
+extend-exclude = ["cpy.pyx", "cpy.c", "tests/conftest.py", ".claude"]
 
 [tool.ruff.lint]
 # D-04: sensible Flask/Py3.9 default — E (pycodestyle errors), W (warnings),

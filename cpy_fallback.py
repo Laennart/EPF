@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from PIL import Image
 import numpy as np
-
+from PIL import Image
 
 EPD_W = 1200
 EPD_H = 1600
@@ -54,12 +53,24 @@ def convert_image(input_image, preview_path=None, dithering_strength=1.0):
     rgb_image = input_image.copy().convert('RGB')
 
     palette = [
-        0, 0, 0,
-        255, 255, 255,
-        255, 216, 0,
-        229, 57, 53,
-        0, 76, 255,
-        29, 185, 84,
+        0,
+        0,
+        0,
+        255,
+        255,
+        255,
+        255,
+        216,
+        0,
+        229,
+        57,
+        53,
+        0,
+        76,
+        255,
+        29,
+        185,
+        84,
     ]
 
     palette += (768 - len(palette)) * [0]
