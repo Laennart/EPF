@@ -23,13 +23,13 @@ def load_scaled(image, angle, display_mode='fit'):
         if orig_ratio > epd_ratio:
             new_height = EPD_H
             new_width = int(new_height * orig_ratio)
-            img = img.resize((new_width, new_height), Image.LANCZOS)
+            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
             left = (new_width - EPD_W) // 2
             img = img.crop((left, 0, left + EPD_W, EPD_H))
         else:
             new_width = EPD_W
             new_height = int(new_width / orig_ratio)
-            img = img.resize((new_width, new_height), Image.LANCZOS)
+            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
             top = (new_height - EPD_H) // 2
             img = img.crop((0, top, EPD_W, top + EPD_H))
     else:
@@ -40,7 +40,7 @@ def load_scaled(image, angle, display_mode='fit'):
             new_height = EPD_H
             new_width = int(new_height * orig_ratio)
 
-        img = img.resize((new_width, new_height), Image.LANCZOS)
+        img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
         bg = Image.new('RGB', (EPD_W, EPD_H), (255, 255, 255))
         offset = ((EPD_W - new_width) // 2, (EPD_H - new_height) // 2)
         bg.paste(img, offset)
