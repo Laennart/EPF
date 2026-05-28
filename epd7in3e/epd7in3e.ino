@@ -89,6 +89,32 @@ private:
     {                       // Add retry loop
       retryOnError = false; // Default to no retry
 
+      // ---- Battery-aware HTTP header (BV-04) ----
+      // 50-sample averaged read for accurate header value. Single-read guard
+      // already ran in setup() via EpaperManager::checkVoltage(); this is a
+      // separate averaged read per original (git 8a000e1) behavior.
+      pinMode(ADC_EN_PIN, OUTPUT);
+      analogSetAttenuation(ADC_11dB);
+      analogReadResolution(12);
+      digitalWrite(ADC_EN_PIN, HIGH);
+      delay(10);
+      int plusV = 0;
+      for (int i = 0; i < 50; i++) {
+        plusV += analogReadMilliVolts(BAT_ADC_PIN);
+        delay(5);
+      }
+      int avgBatteryMv = (plusV / 50) * 2;  // 1:1 divider
+      digitalWrite(ADC_EN_PIN, LOW);
+      bool avgOnBattery = (avgBatteryMv > 1500);
+      int headerValue = avgOnBattery ? avgBatteryMv : 0;
+      http.addHeader("batteryCap", String(headerValue));
+      Serial.printf("HTTP batteryCap header: %d mV (onBattery=%s)\n",
+                    headerValue, avgOnBattery ? "true" : "false");
+      // Refresh stored state so hibernate() sees the latest reading.
+      m_batteryVoltageMv = avgBatteryMv;
+      m_onBattery = avgOnBattery;
+      // ---- end battery header ----
+
       for (uint8_t i = 0; i < MAX_RETRIES; i++)
       {
         int httpCode = http.GET();
