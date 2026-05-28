@@ -528,14 +528,13 @@ void setup()
 {
   Serial.begin(115200);
   delay(3000); // wait for USB-CDC serial monitor to connect
-  Serial.println("\n\n=== EPF booting ===");
   // KNOWN HARDWARE LIMITATION (BV-05, D-12/D-13/D-14):
   // The green charge LEDs (D5, D16 on EE02 board) are driven by the
   // BQ24070 PMIC's STAT1/STAT2 open-drain outputs and are NOT connected
   // to any XIAO GPIO. When no battery is present the PMIC enters a
   // no-battery fault state and the LEDs blink. This cannot be suppressed
   // from firmware. Accepted as a hardware-only behavior.
-  Serial.println("Hello World!");
+  
   // Determine wake up reason
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
 
