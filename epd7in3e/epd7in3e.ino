@@ -303,13 +303,44 @@ private:
     return true;
   }
 
-  // Enter deep sleep mode with calculated wake-up interval
+  // Enter low-power state with calculated wake-up interval.
+  // Battery mode -> real deep sleep with timer + EXT1 GPIO2 wakeup.
+  // USB mode    -> delay then ESP.restart() (deep sleep stalls boards without battery).
   void hibernate(int sleepDuration = 0)
   {
-    // TODO: re-enable deep sleep once battery is connected
-    Serial.printf("hibernate() skipped (no battery) — would sleep %d s\n",
-                  sleepDuration > 0 ? sleepDuration : (int)SLEEP_INTERVAL);
-    return;
+    int sleep_interval = sleepDuration > 0 ? sleepDuration : (int)SLEEP_INTERVAL;
+
+    if (!m_onBattery) {
+      // USB power path (BV-02, BV-03): skip deep sleep entirely.
+      // delay() in Arduino-ESP32 calls vTaskDelay internally, which feeds the
+      // task watchdog. Cast to uint32_t to avoid int*int overflow at >2147s.
+      Serial.printf("USB power: waiting %d s then restarting\n", sleep_interval);
+      Serial.flush();
+      delay((uint32_t)sleep_interval * 1000UL);
+      ESP.restart();
+      return;
+    }
+
+    // Battery power path (BV-03): full deep sleep.
+    Serial.printf("Battery power: entering deep sleep for %d s\n", sleep_interval);
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    fs_deinit();
+    delay(50);
+
+    uint64_t sleep_time = (uint64_t)sleep_interval * 1000000ULL;
+    esp_sleep_enable_timer_wakeup(sleep_time);
+
+    rtc_gpio_init(WAKEUP_PIN);
+    rtc_gpio_set_direction(WAKEUP_PIN, RTC_GPIO_MODE_INPUT_ONLY);
+    rtc_gpio_pullup_en(WAKEUP_PIN);
+    rtc_gpio_pulldown_dis(WAKEUP_PIN);
+    esp_sleep_enable_ext1_wakeup(1ULL << WAKEUP_PIN, ESP_EXT1_WAKEUP_ANY_LOW);
+
+    Serial.println("Entering deep sleep...");
+    Serial.flush();
+    delay(50);
+    esp_deep_sleep_start();
   }
 
   static void resetDeviceCredentials(void)
@@ -498,6 +529,12 @@ void setup()
   Serial.begin(115200);
   delay(3000); // wait for USB-CDC serial monitor to connect
   Serial.println("\n\n=== EPF booting ===");
+  // KNOWN HARDWARE LIMITATION (BV-05, D-12/D-13/D-14):
+  // The green charge LEDs (D5, D16 on EE02 board) are driven by the
+  // BQ24070 PMIC's STAT1/STAT2 open-drain outputs and are NOT connected
+  // to any XIAO GPIO. When no battery is present the PMIC enters a
+  // no-battery fault state and the LEDs blink. This cannot be suppressed
+  // from firmware. Accepted as a hardware-only behavior.
   Serial.println("Hello World!");
   // Determine wake up reason
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
