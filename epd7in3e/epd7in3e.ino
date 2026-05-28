@@ -34,6 +34,8 @@ private:
   // SimpleWiFiManager wifiManager;
   EPaper epaper;
   String imageUrl = "";
+  int m_batteryVoltageMv = 0;
+  bool m_onBattery = false;
 
   bool downloadImage()
   {
@@ -419,6 +421,47 @@ public:
     epaper.update();
     epaper.sleep();
   }
+
+  // Read battery voltage via GPIO1 ADC behind GPIO5 ADC_EN gate.
+  // Returns mV (after 1:1 divider compensation). Single-sample read for
+  // the low-battery guard. The averaged read for the HTTP header is
+  // handled separately in downloadImage() (Plan 02).
+  int checkVoltage()
+  {
+    pinMode(ADC_EN_PIN, OUTPUT);
+    digitalWrite(ADC_EN_PIN, LOW);
+    analogSetAttenuation(ADC_11dB);
+    analogReadResolution(12);
+    digitalWrite(ADC_EN_PIN, HIGH);
+    delay(10);  // load switch + divider settle time
+    int rawMv = analogReadMilliVolts(BAT_ADC_PIN);
+    digitalWrite(ADC_EN_PIN, LOW);
+    int vbatMv = rawMv * 2;  // 1:1 divider (R28=R29=10kΩ)
+    m_batteryVoltageMv = vbatMv;
+    m_onBattery = (vbatMv > 1500);
+    Serial.printf("Battery voltage: %d mV\n", vbatMv);
+    Serial.printf("Power source: %s\n", m_onBattery ? "battery" : "USB");
+    return vbatMv;
+  }
+
+  // Accessor used by Plan 02 to thread state into hibernate() / downloadImage().
+  bool isOnBattery() const { return m_onBattery; }
+  int batteryVoltageMv() const { return m_batteryVoltageMv; }
+
+  // Low-battery guard: if running on battery and below MIN_BATTERY_VOLTAGE,
+  // clear screen, disable WiFi, and enter 24h deep sleep. Does not return.
+  void enforceLowBatteryGuard()
+  {
+    if (m_onBattery && m_batteryVoltageMv < (int)MIN_BATTERY_VOLTAGE) {
+      Serial.printf("Battery low (%d mV < %u mV) — sleeping 24h\n",
+                    m_batteryVoltageMv, (unsigned)MIN_BATTERY_VOLTAGE);
+      clearScreen();
+      WiFi.disconnect(true);
+      WiFi.mode(WIFI_OFF);
+      esp_sleep_enable_timer_wakeup(86400ULL * 1000000ULL);
+      esp_deep_sleep_start();
+    }
+  }
 };
 
 // Global instance
@@ -445,6 +488,9 @@ void setup()
   {
     Serial.println("First boot or reset");
   }
+
+  epaperManager.checkVoltage();
+  epaperManager.enforceLowBatteryGuard();
 
   if (epaperManager.begin())
   {
