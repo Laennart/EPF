@@ -94,7 +94,7 @@ private:
       // already ran in setup() via EpaperManager::checkVoltage(); this is a
       // separate averaged read per original (git 8a000e1) behavior.
       pinMode(ADC_EN_PIN, OUTPUT);
-      analogSetAttenuation(ADC_11dB);
+      analogSetAttenuation(ADC_11db);
       analogReadResolution(12);
       digitalWrite(ADC_EN_PIN, HIGH);
       delay(10);
@@ -487,7 +487,7 @@ public:
   {
     pinMode(ADC_EN_PIN, OUTPUT);
     digitalWrite(ADC_EN_PIN, LOW);
-    analogSetAttenuation(ADC_11dB);
+    analogSetAttenuation(ADC_11db);
     analogReadResolution(12);
     digitalWrite(ADC_EN_PIN, HIGH);
     delay(10);  // load switch + divider settle time
