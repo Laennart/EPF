@@ -38,3 +38,9 @@ Plans:
 - [x] 03-01-PLAN.md — Install ruff/pyright, configure in pyproject.toml, resolve all lint and type errors locally (prerequisite)
 - [x] 03-02-PLAN.md — PR workflow: ruff + pyright + pytest as three parallel jobs on pull_request → main
 - [x] 03-03-PLAN.md — Deploy workflow: manual workflow_dispatch with semver input, build & push to ghcr.io ({version} + latest), git tag, GitHub Release with auto-notes
+
+## Phase 4: Battery Voltage — Detect power source, restore sleep, control charge LED
+
+**Goal:** Restore battery voltage monitoring that was removed in Phase 1. Read the battery ADC on the XIAO ESP32-S3 Plus, detect whether the device is running on battery or USB power, send voltage to the server as a header, re-enable deep sleep when on battery, and suppress the green charge LED when no battery is connected (no-battery flashing serves no useful purpose).
+
+**Requirements:** BV-01, BV-02, BV-03, BV-04, BV-05
