@@ -63,10 +63,10 @@ Two supported paths: pull the prebuilt image (recommended) or build locally.
 
 ### Quick start — pull from GitHub Container Registry
 
-The CI/CD pipeline publishes a multi-arch image to `ghcr.io/lennartschmidt-de/epf` on every tagged release (`v<MAJOR>.<MINOR>.<PATCH>`). To use it, edit `compose.yml` and replace the `build: .` line with:
+The CI/CD pipeline publishes a multi-arch image to `ghcr.io/laennart/epf` on every tagged release (`v<MAJOR>.<MINOR>.<PATCH>`). To use it, edit `compose.yml` and replace the `build: .` line with:
 
 ```yaml
-image: ghcr.io/lennartschmidt-de/epf:latest
+image: ghcr.io/laennart/epf:latest
 ```
 
 (Substitute the lowercase `OWNER/REPO` path matching wherever this repo lives; the Deploy workflow derives the image name from `${GITHUB_REPOSITORY,,}`.)
