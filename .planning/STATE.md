@@ -2,22 +2,21 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-last_updated: "2026-05-27T20:21:30.901Z"
+status: Ready to execute
+last_updated: "2026-05-28T05:18:22.782Z"
 progress:
-  total_phases: 2
+  total_phases: 3
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 9
+  completed_plans: 7
 ---
 
 # Project State
 
 ## Current Position
 
-**Active Phase:** 02 — date-overlay
-**Status:** Milestone complete
-**Plans:** 3 total, 3 complete
+Phase: 03 (ci-cd) — EXECUTING
+Plan: 2 of 3
 
 ## Phase 1 Complete
 
@@ -45,3 +44,6 @@ Phase 01 (hardware-port) completed all 3 plans:
 - .get() fallback in update_app_config for date_overlay keys (backward compat with old config.yaml) (02-03)
 - date_overlay_enabled uses select on/off not checkbox to avoid unchecked-field omission in HTML POST (02-03)
 - Dead draw_text_with_background nested function removed (-125 lines); EXIF fallback kept as date_time_raw (02-03)
+- N816 noqa on rotationAngle global — rename would touch 7 call-sites with no behavior gain (03-01)
+- .claude added to ruff extend-exclude to prevent scanning git worktrees (03-01)
+- pyright basic mode required 0 code changes — all 13 diagnostics are missing-import warnings for third-party stubs (03-01)
