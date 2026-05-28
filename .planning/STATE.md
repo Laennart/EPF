@@ -2,21 +2,21 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-last_updated: "2026-05-28T06:46:05.060Z"
+status: Phase complete — ready for verification
+last_updated: "2026-05-28T06:50:49.573Z"
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 04 (battery-voltage) — EXECUTING
-Plan: 2 of 2
+Phase: 04 (battery-voltage) — COMPLETE (ready for verification)
+Plan: 2 of 2 — DONE
 
 ## Phase 1 Complete
 
@@ -56,3 +56,6 @@ Phase 01 (hardware-port) completed all 3 plans:
 - USB/battery detection: vbatMv > 1500 mV means battery present; ≤1500 means USB-only, guard skipped (04-01)
 - ADC_EN gate: OUTPUT LOW → ADC_11dB → HIGH → delay(10) → analogReadMilliVolts → LOW pattern (04-01)
 - hibernate() stub left intact in Plan 01; Plan 02 will replace it with battery/USB-conditional sleep (04-01)
+- 50-sample averaged ADC read placed inside while(retryOnError) before for(MAX_RETRIES) — header set once per outer attempt before http.GET() (04-02)
+- hibernate() uses m_onBattery member directly (no parameter change needed) — refreshed by averaged read in downloadImage() (04-02)
+- uint32_t cast guards delay overflow: delay((uint32_t)sleep_interval * 1000UL) safe for intervals > 2147s (04-02)

@@ -45,8 +45,8 @@ Plans:
 
 **Requirements:** BV-01, BV-02, BV-03, BV-04, BV-05
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 04-01-PLAN.md — Add BAT_ADC_PIN/ADC_EN_PIN/MIN_BATTERY_VOLTAGE defines; implement checkVoltage() + enforceLowBatteryGuard() in EpaperManager; call from setup()
-- [ ] 04-02-PLAN.md — Add 50-sample averaged batteryCap HTTP header in downloadImage(); replace hibernate() stub with USB/battery branching; document BQ24070 LED limitation
+- [x] 04-02-PLAN.md — Add 50-sample averaged batteryCap HTTP header in downloadImage(); replace hibernate() stub with USB/battery branching; document BQ24070 LED limitation
