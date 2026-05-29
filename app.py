@@ -410,10 +410,21 @@ def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(
         date_str = parse_photo_date(immich_date_raw) or parse_photo_date(date_time_raw)
         if date_str:
             try:
-                font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 26)
+                font = ImageFont.truetype(
+                    '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+                    overlay_font_size,
+                )
             except (IOError, OSError):
                 font = ImageFont.load_default()
-            draw_date_overlay(output_img, date_str, font, date_overlay_position, padding=6, rotation=rotation)
+            draw_date_overlay(
+                output_img, date_str, font, date_overlay_position, padding=6,
+                rotation=rotation,
+                style=overlay_style,
+                bg_color=OVERLAY_COLORS.get(overlay_bg_color, (0, 0, 0, 255)),
+                text_color=OVERLAY_COLORS.get(overlay_text_color, (255, 255, 255, 255)),
+                border_color=OVERLAY_COLORS.get(overlay_border_color, (255, 255, 255, 255)),
+                stroke_width=overlay_stroke_width,
+            )
 
     # Save image into ram
     img_io = io.BytesIO()
@@ -551,7 +562,13 @@ def update_app_config(new_config):
         sleep_start_minute, \
         sleep_end_minute, \
         date_overlay_enabled, \
-        date_overlay_position
+        date_overlay_position, \
+        overlay_style, \
+        overlay_bg_color, \
+        overlay_text_color, \
+        overlay_border_color, \
+        overlay_stroke_width, \
+        overlay_font_size
 
     current_config = new_config
 
@@ -584,6 +601,12 @@ def update_app_config(new_config):
     sleep_end_minute = new_config['immich']['sleep_end_minute']
     date_overlay_enabled = new_config['immich'].get('date_overlay_enabled', False)
     date_overlay_position = new_config['immich'].get('date_overlay_position', 'bottomRight')
+    overlay_style = new_config['immich'].get('overlay_style', 'background')
+    overlay_bg_color = new_config['immich'].get('overlay_bg_color', 'black')
+    overlay_text_color = new_config['immich'].get('overlay_text_color', 'white')
+    overlay_border_color = new_config['immich'].get('overlay_border_color', 'white')
+    overlay_stroke_width = int(new_config['immich'].get('overlay_stroke_width', 2))
+    overlay_font_size = int(new_config['immich'].get('overlay_font_size', 26))
 
     print(
         f'Configuration updated: URL = {url}, Album = {albumname}, angle = {rotationAngle}, enhance = {img_enhanced}, contrast = {img_contrast}, strength = {strength}, display_mode = {display_mode}, image_order = {image_order}'
