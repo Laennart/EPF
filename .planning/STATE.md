@@ -2,21 +2,21 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-last_updated: "2026-05-29T06:51:52.450Z"
+status: ready_for_verification
+last_updated: "2026-05-29T08:00:00.000Z"
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 15
-  completed_plans: 13
+  completed_plans: 14
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 06 (text-customization-colors-styles-and-border-mode) — EXECUTING
-Plan: 3 of 3
+Phase: 06 (text-customization-colors-styles-and-border-mode) — COMPLETE
+Plan: 3 of 3 — all plans complete; awaiting verification
 
 ## Phase 1 Complete
 
@@ -63,6 +63,9 @@ Phase 01 (hardware-port) completed all 3 plans:
 - stroke_width passed to textbbox probe only in outline mode — background mode bbox matches legacy exactly (D-14 compat) (06-02)
 - outline mode omits draw.rectangle() entirely; stroke provides visual separation per D-07 (06-02)
 - OVERLAY_COLORS dict placed after palette list to co-locate authoritative RGB source with derived RGBA lookup (06-02)
+- 6 overlay globals added to update_app_config() global statement with .get() fallback reads; backward compat with old config.yaml (06-03)
+- int() cast on slider values in both update_app_config() and POST handler; prevents type errors when YAML loads values as strings (06-03)
+- Color dropdowns always visible — no JS show/hide; small-text labels describe applicability per style mode (06-03)
 
 ## Phase 6 Plan Status
 
@@ -70,7 +73,7 @@ Phase 01 (hardware-port) completed all 3 plans:
 |------|------|--------|
 | 06-01 | TDD RED contract tests (TC-01..TC-09) | complete |
 | 06-02 | OVERLAY_COLORS, config schema, extended draw_date_overlay() | complete |
-| 06-03 | UI/POST wiring and settings.html | pending |
+| 06-03 | UI/POST wiring and settings.html | complete |
 
 ## Accumulated Context
 
