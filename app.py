@@ -720,6 +720,12 @@ def settings():
                 ),
                 'date_overlay_enabled': request.form.get('date_overlay_enabled', 'off') == 'on',
                 'date_overlay_position': request.form.get('date_overlay_position', 'bottomRight'),
+                'overlay_style': request.form.get('overlay_style', current_config['immich'].get('overlay_style', 'background')),
+                'overlay_bg_color': request.form.get('overlay_bg_color', current_config['immich'].get('overlay_bg_color', 'black')),
+                'overlay_text_color': request.form.get('overlay_text_color', current_config['immich'].get('overlay_text_color', 'white')),
+                'overlay_border_color': request.form.get('overlay_border_color', current_config['immich'].get('overlay_border_color', 'white')),
+                'overlay_stroke_width': int(request.form.get('overlay_stroke_width', current_config['immich'].get('overlay_stroke_width', 2))),
+                'overlay_font_size': int(request.form.get('overlay_font_size', current_config['immich'].get('overlay_font_size', 26))),
             }
         }
 
