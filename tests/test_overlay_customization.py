@@ -96,3 +96,58 @@ def test_stroke_width_zero(blank_rgb_image, dejavu_or_default_font):
     )
     # With stroke_width=0 there is no stroke, so the distinct border_color must NOT appear
     assert (229, 57, 53) not in list(img.getdata())
+
+
+# --- Config contract (TC-02, TC-08, TC-09) ---
+
+
+def test_default_config_new_keys():
+    """TC-02: DEFAULT_CONFIG['immich'] contains all 6 new overlay keys with correct defaults."""
+    from app import DEFAULT_CONFIG
+
+    imm = DEFAULT_CONFIG['immich']
+    assert imm['overlay_style'] == 'background'
+    assert imm['overlay_bg_color'] == 'black'
+    assert imm['overlay_text_color'] == 'white'
+    assert imm['overlay_border_color'] == 'white'
+    assert imm['overlay_stroke_width'] == 2
+    assert imm['overlay_font_size'] == 26
+
+
+def test_update_config_new_keys():
+    """TC-08: update_app_config reads new overlay globals; missing keys fall back to defaults."""
+    import app
+
+    new_config = {'immich': dict(app.DEFAULT_CONFIG['immich'])}
+    new_config['immich']['overlay_style'] = 'outline'
+    new_config['immich']['overlay_bg_color'] = 'red'
+    new_config['immich']['overlay_text_color'] = 'yellow'
+    new_config['immich']['overlay_border_color'] = 'blue'
+    new_config['immich']['overlay_stroke_width'] = 4
+    new_config['immich']['overlay_font_size'] = 40
+    app.update_app_config(new_config)
+    assert app.overlay_style == 'outline'
+    assert app.overlay_bg_color == 'red'
+    assert app.overlay_text_color == 'yellow'
+    assert app.overlay_border_color == 'blue'
+    assert app.overlay_stroke_width == 4
+    assert app.overlay_font_size == 40
+
+    # backward-compat: a config missing the new keys must NOT raise (.get fallback)
+    legacy = {'immich': {k: v for k, v in app.DEFAULT_CONFIG['immich'].items()
+                         if not k.startswith('overlay_')}}
+    app.update_app_config(legacy)
+    assert app.overlay_style == 'background'   # fell back to default
+    assert app.overlay_font_size == 26
+
+
+def test_post_handler_font_size_int():
+    """TC-09: overlay_font_size and overlay_stroke_width globals are stored as ints."""
+    import app
+
+    new_config = {'immich': dict(app.DEFAULT_CONFIG['immich'])}
+    new_config['immich']['overlay_font_size'] = 32
+    new_config['immich']['overlay_stroke_width'] = 3
+    app.update_app_config(new_config)
+    assert isinstance(app.overlay_font_size, int)
+    assert isinstance(app.overlay_stroke_width, int)
