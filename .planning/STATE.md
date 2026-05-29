@@ -15,8 +15,8 @@ progress:
 
 ## Current Position
 
-Phase: 05
-Plan: Not started
+Phase: 06
+Plan: 03 (next)
 
 ## Phase 1 Complete
 
@@ -60,3 +60,14 @@ Phase 01 (hardware-port) completed all 3 plans:
 - hibernate() uses m_onBattery member directly (no parameter change needed) — refreshed by averaged read in downloadImage() (04-02)
 - uint32_t cast guards delay overflow: delay((uint32_t)sleep_interval * 1000UL) safe for intervals > 2147s (04-02)
 - Single atomic README write covers Tasks 1+2 — pin layout table sourced from epd7in3e.ino header; ghcr.io path uses lennartschmidt-de/epf (05-01)
+- stroke_width passed to textbbox probe only in outline mode — background mode bbox matches legacy exactly (D-14 compat) (06-02)
+- outline mode omits draw.rectangle() entirely; stroke provides visual separation per D-07 (06-02)
+- OVERLAY_COLORS dict placed after palette list to co-locate authoritative RGB source with derived RGBA lookup (06-02)
+
+## Phase 6 Plan Status
+
+| Plan | Name | Status |
+|------|------|--------|
+| 06-01 | TDD RED contract tests (TC-01..TC-09) | complete |
+| 06-02 | OVERLAY_COLORS, config schema, extended draw_date_overlay() | complete |
+| 06-03 | UI/POST wiring and settings.html | pending |
