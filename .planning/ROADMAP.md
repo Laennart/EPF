@@ -70,9 +70,9 @@ Plans:
 
 **Depends on:** Phase 5
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 - [x] 06-01-PLAN.md — Wave 0 (TDD RED): tests/test_overlay_customization.py with 9 failing contract tests (OVERLAY_COLORS, extended draw_date_overlay signature, bg/outline modes, config keys)
-- [ ] 06-02-PLAN.md — TDD GREEN: add OVERLAY_COLORS dict + 6 DEFAULT_CONFIG keys + globals; extend draw_date_overlay() with style/colors/stroke (TC-01..TC-07)
-- [ ] 06-03-PLAN.md — Wire update_app_config + POST handler + scale_img_in_memory call site + settings.html controls (TC-08, TC-09)
+- [x] 06-02-PLAN.md — TDD GREEN: add OVERLAY_COLORS dict + 6 DEFAULT_CONFIG keys + globals; extend draw_date_overlay() with style/colors/stroke (TC-01..TC-07)
+- [x] 06-03-PLAN.md — Wire update_app_config + POST handler + scale_img_in_memory call site + settings.html controls (TC-08, TC-09)
