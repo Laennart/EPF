@@ -98,8 +98,15 @@ POSITIONS = {
 }
 
 
-def draw_date_overlay(output_img, text, font, position_str, padding=6, rotation=0):
-    """Draw white text on a solid black background rectangle at position_str.
+def draw_date_overlay(
+    output_img, text, font, position_str, padding=6, rotation=0,
+    style="background",
+    bg_color=(0, 0, 0, 255),
+    text_color=(255, 255, 255, 255),
+    border_color=(255, 255, 255, 255),
+    stroke_width=2,
+):
+    """Draw a date overlay (filled-background or outline style) at position_str.
 
     Accounts for display rotation so that position_str refers to the viewer's
     visual corner (e.g. 'bottomRight' always appears at the viewer's bottom-right
@@ -111,10 +118,15 @@ def draw_date_overlay(output_img, text, font, position_str, padding=6, rotation=
         text:         String to render (e.g. '05.01.2022').
         font:         PIL ImageFont instance.
         position_str: One of POSITIONS keys; unknown values fall back to 'bottomRight'.
-        padding:      Pixels of black background around the text on all sides.
+        padding:      Pixels of background around the text on all sides.
         rotation:     Display rotation angle in degrees (0, 90, 180, 270).
                       Must match the rotationAngle used by load_scaled so that
                       the overlay is placed correctly in viewer space.
+        style:        "background" (filled rect + text) or "outline" (stroke text only).
+        bg_color:     RGBA tuple for the filled rectangle in background mode.
+        text_color:   RGBA tuple for the text glyph fill in both modes.
+        border_color: RGBA tuple for the stroke in outline mode.
+        stroke_width: Stroke width in pixels used in outline mode.
     """
     bw, bh = output_img.size  # buffer dimensions (always 1200x1600)
 
@@ -126,7 +138,8 @@ def draw_date_overlay(output_img, text, font, position_str, padding=6, rotation=
 
     # --- Step 1: measure text in viewer space ---
     _probe = ImageDraw.Draw(Image.new('RGB', (1, 1)))
-    bbox = _probe.textbbox((0, 0), text, font=font)
+    sw = stroke_width if style == "outline" else 0
+    bbox = _probe.textbbox((0, 0), text, font=font, stroke_width=sw)
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
 
@@ -138,8 +151,15 @@ def draw_date_overlay(output_img, text, font, position_str, padding=6, rotation=
     viewer_canvas = Image.new('RGBA', (vw, vh), (0, 0, 0, 0))
     draw = ImageDraw.Draw(viewer_canvas)
     rect = [x - padding, y - padding, x + tw + padding, y + th + padding]
-    draw.rectangle(rect, fill=(0, 0, 0, 255))
-    draw.text((x - bbox[0], y - bbox[1]), text, fill=(255, 255, 255, 255), font=font)
+    if style == "background":
+        draw.rectangle(rect, fill=bg_color)
+        draw.text((x - bbox[0], y - bbox[1]), text, fill=text_color, font=font)
+    else:  # outline — no rectangle, stroke provides separation (D-07)
+        draw.text(
+            (x - bbox[0], y - bbox[1]), text,
+            fill=text_color, font=font,
+            stroke_width=stroke_width, stroke_fill=border_color,
+        )
 
     # --- Step 4: rotate viewer canvas into buffer orientation ---
     # load_scaled rotated the image content by `rotation`° CCW; apply the same
