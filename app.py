@@ -48,6 +48,12 @@ DEFAULT_CONFIG = {
         'wakeup_interval': 60,  # Default 60 minutes (1 hour)
         'date_overlay_enabled': False,  # D-01: overlay off by default
         'date_overlay_position': 'bottomRight',  # D-05: default position
+        'overlay_style': 'background',      # D-04/D-14: "background" | "outline"
+        'overlay_bg_color': 'black',        # D-06/D-14: rect fill (background mode)
+        'overlay_text_color': 'white',      # D-06/D-07/D-14: text glyph fill (both modes)
+        'overlay_border_color': 'white',    # D-08/D-14: stroke color (outline mode)
+        'overlay_stroke_width': 2,          # D-09/D-11/D-14: stroke px (outline mode), int
+        'overlay_font_size': 26,            # D-12/D-13/D-14: font px, int
     }
 }
 
@@ -165,6 +171,12 @@ sleep_end_hour = DEFAULT_CONFIG['immich']['sleep_end_hour']
 sleep_end_minute = DEFAULT_CONFIG['immich']['sleep_end_minute']
 date_overlay_enabled = DEFAULT_CONFIG['immich']['date_overlay_enabled']
 date_overlay_position = DEFAULT_CONFIG['immich']['date_overlay_position']
+overlay_style = DEFAULT_CONFIG['immich']['overlay_style']
+overlay_bg_color = DEFAULT_CONFIG['immich']['overlay_bg_color']
+overlay_text_color = DEFAULT_CONFIG['immich']['overlay_text_color']
+overlay_border_color = DEFAULT_CONFIG['immich']['overlay_border_color']
+overlay_stroke_width = DEFAULT_CONFIG['immich']['overlay_stroke_width']
+overlay_font_size = DEFAULT_CONFIG['immich']['overlay_font_size']
 
 # Retrieve environment variables with error handling
 apikey = os.getenv('IMMICH_API_KEY')
@@ -201,6 +213,16 @@ palette = [
     (0, 76, 255),  # index 4 → T133A01 nibble 0xD (blue)
     (29, 185, 84),  # index 5 → T133A01 nibble 0x2 (green)
 ]
+
+# Source: palette above (authoritative). String name -> RGBA for overlay color resolution.
+OVERLAY_COLORS = {
+    'black':  (0,   0,   0,   255),
+    'white':  (255, 255, 255, 255),
+    'yellow': (255, 216, 0,   255),
+    'red':    (229, 57,  53,  255),
+    'blue':   (0,   76,  255, 255),
+    'green':  (29,  185, 84,  255),
+}
 
 last_battery_voltage = 0
 last_battery_update = 0
