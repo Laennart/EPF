@@ -192,3 +192,72 @@ def test_scale_img_no_overlay(large_rgb_image, monkeypatch):
         immich_exif_raw=None,
     )
     assert captured == []
+
+
+# --- geo_overlay_enabled toggle (GEO-13..GEO-15) --------------------------------
+
+
+def test_scale_img_geo_disabled_shows_date_only(large_rgb_image, monkeypatch):
+    """GEO-13: geo_overlay_enabled=False produces date-only overlay even when location is available."""
+    import app
+
+    monkeypatch.setattr(app, 'date_overlay_enabled', True, raising=False)
+    monkeypatch.setattr(app, 'geo_overlay_enabled', False, raising=False)
+    monkeypatch.setattr(app, 'parse_photo_location', lambda **k: 'Munich, Germany')
+
+    captured = []
+    monkeypatch.setattr(app, 'draw_date_overlay', lambda img, text, *a, **k: captured.append(text))
+
+    app.scale_img_in_memory(
+        large_rgb_image,
+        immich_date_raw='2022-01-05T10:00:00.000Z',
+        immich_exif_raw={'city': 'Munich', 'country': 'Germany'},
+    )
+    assert captured == ['05.01.2022']
+
+
+def test_scale_img_geo_enabled_shows_full_overlay(large_rgb_image, monkeypatch):
+    """GEO-14: geo_overlay_enabled=True with location available shows 'City • date' format."""
+    import app
+
+    monkeypatch.setattr(app, 'date_overlay_enabled', True, raising=False)
+    monkeypatch.setattr(app, 'geo_overlay_enabled', True, raising=False)
+    monkeypatch.setattr(app, 'parse_photo_location', lambda **k: 'Munich, Germany')
+
+    captured = []
+    monkeypatch.setattr(app, 'draw_date_overlay', lambda img, text, *a, **k: captured.append(text))
+
+    app.scale_img_in_memory(
+        large_rgb_image,
+        immich_date_raw='2022-01-05T10:00:00.000Z',
+        immich_exif_raw={'city': 'Munich', 'country': 'Germany'},
+    )
+    assert captured == ['Munich, Germany • 05.01.2022']
+
+
+def test_update_app_config_geo_overlay_defaults_to_true(monkeypatch):
+    """GEO-15: update_app_config with config missing geo_overlay_enabled key defaults global to True."""
+    import app
+
+    config_without_geo = {
+        'immich': {
+            'url': 'http://localhost',
+            'album': 'test',
+            'rotation': 0,
+            'enhanced': 1.0,
+            'contrast': 1.0,
+            'strength': 1.0,
+            'display_mode': 'fill',
+            'image_order': 'random',
+            'sleep_start_hour': 23,
+            'sleep_start_minute': 0,
+            'sleep_end_hour': 6,
+            'sleep_end_minute': 0,
+            'wakeup_interval': 60,
+            'date_overlay_enabled': False,
+            # geo_overlay_enabled intentionally absent
+        }
+    }
+
+    app.update_app_config(config_without_geo)
+    assert app.geo_overlay_enabled is True
