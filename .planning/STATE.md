@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Milestone complete
-last_updated: "2026-06-01T19:15:00.000Z"
+last_updated: "2026-06-01T20:00:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 7
@@ -93,6 +93,7 @@ Phase 01 (hardware-port) completed all 3 plans:
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260601-tat | Add geo overlay toggle to settings — allow showing date, location, both, or neither | 2026-06-01 | 6cdb4dd | [260601-tat-add-geo-overlay-toggle-to-settings-allow](.planning/quick/260601-tat-add-geo-overlay-toggle-to-settings-allow/) |
+| 260601-udz | Add language switching for geo-location overlay | 2026-06-01 | 532bcb5 | [260601-udz-add-language-switching-for-geo-location-](.planning/quick/260601-udz-add-language-switching-for-geo-location-/) |
 
 ## Accumulated Context
 
