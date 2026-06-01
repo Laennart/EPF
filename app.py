@@ -147,20 +147,20 @@ def _save_geo_cache(cache):
 
 def reverse_geocode_cached(lat, lon):
     """Return 'City, Country' string or None. Persistent JSON cache; null cached on failure."""
-    key = f"{round(float(lat), 3)},{round(float(lon), 3)}"
+    key = f'{round(float(lat), 3)},{round(float(lon), 3)}'
     cache = _load_geo_cache()
     if key in cache:
         return cache[key]
     result = None
     try:
-        geolocator = Nominatim(user_agent="epf-photo-frame/1.0", timeout=5)
+        geolocator = Nominatim(user_agent='epf-photo-frame/1.0', timeout=5)
         location = geolocator.reverse((lat, lon), exactly_one=True, language='en')
         if location:
             addr = location.raw.get('address', {})
             city = addr.get('city') or addr.get('town') or addr.get('village')
             country = addr.get('country')
             if city and country:
-                result = f"{city}, {country}"
+                result = f'{city}, {country}'
     except (GeocoderTimedOut, GeocoderServiceError, Exception) as e:
         print(f'[WARN] Nominatim geocoding failed for ({lat},{lon}): {e}')
     cache[key] = result
@@ -178,7 +178,7 @@ def parse_photo_location(local_image=None, immich_exif=None):
         city = immich_exif.get('city') or ''
         country = immich_exif.get('country') or ''
         if city and country:
-            return f"{city}, {country}"
+            return f'{city}, {country}'
         if city:
             return city
         if country:
@@ -441,7 +441,9 @@ def depalette_image(pixels, palette):
     return indices
 
 
-def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(255, 255, 255), immich_date_raw=None, immich_exif_raw=None):
+def scale_img_in_memory(
+    image, target_width=1200, target_height=1600, bg_color=(255, 255, 255), immich_date_raw=None, immich_exif_raw=None
+):
     """
     Process image in memory, return BytesIO object
 
@@ -527,10 +529,14 @@ def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(
 
     # Date/geo overlay (D-07/D-19 fallback chain). Off by default (D-01); silently hidden when neither available (D-03).
     if date_overlay_enabled:
-        location_str = parse_photo_location(local_image=pre_transpose_image, immich_exif=immich_exif_raw) if geo_overlay_enabled else None
+        location_str = (
+            parse_photo_location(local_image=pre_transpose_image, immich_exif=immich_exif_raw)
+            if geo_overlay_enabled
+            else None
+        )
         date_str = parse_photo_date(immich_date_raw) or parse_photo_date(date_time_raw)
         if location_str and date_str:
-            overlay_text = f"{location_str} • {date_str}"
+            overlay_text = f'{location_str} • {date_str}'
         elif location_str:
             overlay_text = location_str
         else:

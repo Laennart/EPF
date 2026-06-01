@@ -47,7 +47,7 @@ def test_extract_gps_no_exif_method():
     """GEO-03: extract_gps_from_exif() returns None when _getexif returns None."""
     from app import extract_gps_from_exif
 
-    img = Image.new("RGB", (10, 10))
+    img = Image.new('RGB', (10, 10))
     img._getexif = lambda: None  # noqa: SLF001
     assert extract_gps_from_exif(img) is None
 
