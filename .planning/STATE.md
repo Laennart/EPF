@@ -80,3 +80,4 @@ Phase 01 (hardware-port) completed all 3 plans:
 ### Roadmap Evolution
 
 - Phase 6 added: Text customization — colors, styles, and border mode (timestamp background color, text color, border style option with configurable border/text color; all exposed in Configuration UI)
+- Phase 7 added: Geolocation overlay from image metadata — extend overlay to show rough location from EXIF/Immich API; fall back to timestamp if no geo info present
