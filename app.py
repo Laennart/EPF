@@ -1057,7 +1057,11 @@ def serve_immich_image():
         image = Image.open(image_data)
 
     immich_date_raw = selected_image.get('exifInfo', {}).get('dateTimeOriginal')
-    processed_image = scale_img_in_memory(image, immich_date_raw=immich_date_raw)
+    processed_image = scale_img_in_memory(
+        image,
+        immich_date_raw=immich_date_raw,
+        immich_exif_raw=selected_image.get('exifInfo', {}),
+    )
     processed_image.seek(0)
     c_code = convert_to_c_code_in_memory(Image.open(processed_image))
 
