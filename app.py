@@ -58,6 +58,7 @@ DEFAULT_CONFIG = {
         'overlay_border_color': 'white',  # D-08/D-14: stroke color (outline mode)
         'overlay_stroke_width': 2,  # D-09/D-11/D-14: stroke px (outline mode), int
         'overlay_font_size': 26,  # D-12/D-13/D-14: font px, int
+        'overlay_language': 'en',  # 'en' | 'de' — Nominatim reverse-geocode language (GEO-LANG)
     }
 }
 
@@ -146,15 +147,19 @@ def _save_geo_cache(cache):
 
 
 def reverse_geocode_cached(lat, lon):
-    """Return 'City, Country' string or None. Persistent JSON cache; null cached on failure."""
-    key = f'{round(float(lat), 3)},{round(float(lon), 3)}'
+    """Return 'City, Country' string or None. Persistent JSON cache; null cached on failure.
+
+    Cache key is language-suffixed (e.g. '48.135,11.582:en') so 'en' and 'de' results coexist.
+    Language is read from the module-level `overlay_language` global (default 'en').
+    """
+    key = f'{round(float(lat), 3)},{round(float(lon), 3)}:{overlay_language}'
     cache = _load_geo_cache()
     if key in cache:
         return cache[key]
     result = None
     try:
         geolocator = Nominatim(user_agent='epf-photo-frame/1.0', timeout=5)  # type: ignore[arg-type]
-        location = geolocator.reverse((lat, lon), exactly_one=True, language='en')  # type: ignore[arg-type]
+        location = geolocator.reverse((lat, lon), exactly_one=True, language=overlay_language)  # type: ignore[arg-type]
         if location:
             addr = location.raw.get('address', {})  # type: ignore[union-attr]
             city = addr.get('city') or addr.get('town') or addr.get('village')
@@ -313,6 +318,7 @@ overlay_text_color = DEFAULT_CONFIG['immich']['overlay_text_color']
 overlay_border_color = DEFAULT_CONFIG['immich']['overlay_border_color']
 overlay_stroke_width = DEFAULT_CONFIG['immich']['overlay_stroke_width']
 overlay_font_size = DEFAULT_CONFIG['immich']['overlay_font_size']
+overlay_language = DEFAULT_CONFIG['immich']['overlay_language']
 
 # Retrieve environment variables with error handling
 apikey = os.getenv('IMMICH_API_KEY')
@@ -706,7 +712,8 @@ def update_app_config(new_config):
         overlay_text_color, \
         overlay_border_color, \
         overlay_stroke_width, \
-        overlay_font_size
+        overlay_font_size, \
+        overlay_language
 
     current_config = new_config
 
@@ -746,6 +753,7 @@ def update_app_config(new_config):
     overlay_border_color = new_config['immich'].get('overlay_border_color', 'white')
     overlay_stroke_width = int(new_config['immich'].get('overlay_stroke_width', 2))
     overlay_font_size = int(new_config['immich'].get('overlay_font_size', 26))
+    overlay_language = new_config['immich'].get('overlay_language', 'en')
 
     print(
         f'Configuration updated: URL = {url}, Album = {albumname}, angle = {rotationAngle}, enhance = {img_enhanced}, contrast = {img_contrast}, strength = {strength}, display_mode = {display_mode}, image_order = {image_order}'
@@ -877,6 +885,9 @@ def settings():
                 ),
                 'overlay_font_size': int(
                     request.form.get('overlay_font_size', current_config['immich'].get('overlay_font_size', 26))
+                ),
+                'overlay_language': request.form.get(
+                    'overlay_language', current_config['immich'].get('overlay_language', 'en')
                 ),
             }
         }

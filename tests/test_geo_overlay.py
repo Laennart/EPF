@@ -1,4 +1,4 @@
-"""Tests for Phase 7: Geolocation Overlay (GEO-01..GEO-12).
+"""Tests for Phase 7: Geolocation Overlay (GEO-01..GEO-12) and language switching (GEO-LANG-01..GEO-LANG-02).
 
 These tests target interfaces that Plans 07-02 and 07-03 will create.
 They MUST fail (RED) until those plans land — that is the TDD contract.
@@ -15,6 +15,8 @@ GEO-09: scale_img_in_memory() renders geo+date combined overlay text
 GEO-10: scale_img_in_memory() renders date-only when no geo available
 GEO-11: scale_img_in_memory() renders location-only when no date available
 GEO-12: Overlay hidden when neither geo nor date available
+GEO-LANG-01: reverse_geocode_cached() passes overlay_language='de' to Nominatim and stores under language-keyed entry
+GEO-LANG-02: 'en'-keyed cache entry is NOT returned when overlay_language='de' (cache miss triggers fresh lookup)
 """
 
 import json
@@ -86,12 +88,13 @@ def test_geocache_hit_no_network_call(mock_geo_cache_dir, monkeypatch):
     import app
 
     cache_file = mock_geo_cache_dir / 'geo_cache.json'
-    cache_file.write_text(json.dumps({'48.135,11.582': 'Munich, Germany'}))
+    cache_file.write_text(json.dumps({'48.135,11.582:en': 'Munich, Germany'}))
 
     def _nominatim_must_not_be_called(*a, **k):
         raise AssertionError('network called')
 
     monkeypatch.setattr(app, 'Nominatim', _nominatim_must_not_be_called)
+    monkeypatch.setattr(app, 'overlay_language', 'en', raising=False)
     assert app.reverse_geocode_cached(48.1351, 11.5820) == 'Munich, Germany'
 
 
@@ -107,14 +110,15 @@ def test_geocache_stores_null_on_error(mock_geo_cache_dir, monkeypatch):
             raise Exception('network failure')
 
     monkeypatch.setattr(app, 'Nominatim', _BadNominatim)
+    monkeypatch.setattr(app, 'overlay_language', 'en', raising=False)
 
     result = app.reverse_geocode_cached(10.0, 20.0)
     assert result is None
 
     cache_file = mock_geo_cache_dir / 'geo_cache.json'
     cache = json.loads(cache_file.read_text())
-    assert '10.0,20.0' in cache
-    assert cache['10.0,20.0'] is None
+    assert '10.0,20.0:en' in cache
+    assert cache['10.0,20.0:en'] is None
 
 
 # --- scale_img_in_memory overlay assembly (GEO-09..GEO-12) -------------------
@@ -261,3 +265,69 @@ def test_update_app_config_geo_overlay_defaults_to_true(monkeypatch):
 
     app.update_app_config(config_without_geo)
     assert app.geo_overlay_enabled is True
+
+
+# --- Language switching (GEO-LANG-01..GEO-LANG-02) ---------------------------
+
+
+def test_geocache_uses_language_kwarg_de(mock_geo_cache_dir, monkeypatch):
+    """GEO-LANG-01: reverse_geocode_cached passes language='de' to Nominatim and stores under ':de' key."""
+    import app
+
+    captured_kwargs = {}
+
+    class _FakeNominatim:
+        def __init__(self, *a, **k):
+            pass
+
+        def reverse(self, coords, **k):
+            captured_kwargs.update(k)
+
+            class _FakeLoc:
+                raw = {'address': {'city': 'München', 'country': 'Deutschland'}}
+
+            return _FakeLoc()
+
+    monkeypatch.setattr(app, 'Nominatim', _FakeNominatim)
+    monkeypatch.setattr(app, 'overlay_language', 'de', raising=False)
+
+    result = app.reverse_geocode_cached(48.1351, 11.5820)
+
+    assert result == 'München, Deutschland'
+    assert captured_kwargs.get('language') == 'de'
+
+    cache_file = mock_geo_cache_dir / 'geo_cache.json'
+    cache = json.loads(cache_file.read_text())
+    assert '48.135,11.582:de' in cache
+    assert cache['48.135,11.582:de'] == 'München, Deutschland'
+
+
+def test_geocache_en_entry_not_returned_for_de(mock_geo_cache_dir, monkeypatch):
+    """GEO-LANG-02: An 'en'-keyed entry is NOT returned when overlay_language='de' (cache miss)."""
+    import app
+
+    cache_file = mock_geo_cache_dir / 'geo_cache.json'
+    cache_file.write_text(json.dumps({'48.135,11.582:en': 'Munich, Germany'}))
+
+    nominatim_called = []
+
+    class _FakeNominatim:
+        def __init__(self, *a, **k):
+            pass
+
+        def reverse(self, coords, **k):
+            nominatim_called.append(k.get('language'))
+
+            class _FakeLoc:
+                raw = {'address': {'city': 'München', 'country': 'Deutschland'}}
+
+            return _FakeLoc()
+
+    monkeypatch.setattr(app, 'Nominatim', _FakeNominatim)
+    monkeypatch.setattr(app, 'overlay_language', 'de', raising=False)
+
+    result = app.reverse_geocode_cached(48.1351, 11.5820)
+
+    # Must NOT return stale 'en' result; must trigger a fresh lookup
+    assert result == 'München, Deutschland'
+    assert nominatim_called == ['de']
