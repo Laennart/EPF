@@ -50,6 +50,7 @@ DEFAULT_CONFIG = {
         'sleep_end_minute': 0,  # Sleep end time 6:00 (6:00 AM)
         'wakeup_interval': 60,  # Default 60 minutes (1 hour)
         'date_overlay_enabled': False,  # D-01: overlay off by default
+        'geo_overlay_enabled': True,  # location visible by default when date overlay is on
         'date_overlay_position': 'bottomRight',  # D-05: default position
         'overlay_style': 'background',  # D-04/D-14: "background" | "outline"
         'overlay_bg_color': 'black',  # D-06/D-14: rect fill (background mode)
@@ -304,6 +305,7 @@ sleep_start_minute = DEFAULT_CONFIG['immich']['sleep_start_minute']
 sleep_end_hour = DEFAULT_CONFIG['immich']['sleep_end_hour']
 sleep_end_minute = DEFAULT_CONFIG['immich']['sleep_end_minute']
 date_overlay_enabled = DEFAULT_CONFIG['immich']['date_overlay_enabled']
+geo_overlay_enabled = DEFAULT_CONFIG['immich']['geo_overlay_enabled']
 date_overlay_position = DEFAULT_CONFIG['immich']['date_overlay_position']
 overlay_style = DEFAULT_CONFIG['immich']['overlay_style']
 overlay_bg_color = DEFAULT_CONFIG['immich']['overlay_bg_color']
@@ -525,7 +527,7 @@ def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(
 
     # Date/geo overlay (D-07/D-19 fallback chain). Off by default (D-01); silently hidden when neither available (D-03).
     if date_overlay_enabled:
-        location_str = parse_photo_location(local_image=pre_transpose_image, immich_exif=immich_exif_raw)
+        location_str = parse_photo_location(local_image=pre_transpose_image, immich_exif=immich_exif_raw) if geo_overlay_enabled else None
         date_str = parse_photo_date(immich_date_raw) or parse_photo_date(date_time_raw)
         if location_str and date_str:
             overlay_text = f"{location_str} • {date_str}"
@@ -691,6 +693,7 @@ def update_app_config(new_config):
         sleep_start_minute, \
         sleep_end_minute, \
         date_overlay_enabled, \
+        geo_overlay_enabled, \
         date_overlay_position, \
         overlay_style, \
         overlay_bg_color, \
@@ -729,6 +732,7 @@ def update_app_config(new_config):
     sleep_start_minute = new_config['immich']['sleep_start_minute']
     sleep_end_minute = new_config['immich']['sleep_end_minute']
     date_overlay_enabled = new_config['immich'].get('date_overlay_enabled', False)
+    geo_overlay_enabled = new_config['immich'].get('geo_overlay_enabled', True)
     date_overlay_position = new_config['immich'].get('date_overlay_position', 'bottomRight')
     overlay_style = new_config['immich'].get('overlay_style', 'background')
     overlay_bg_color = new_config['immich'].get('overlay_bg_color', 'black')
@@ -848,6 +852,7 @@ def settings():
                     request.form.get('wakeup_interval', current_config['immich']['wakeup_interval'])
                 ),
                 'date_overlay_enabled': request.form.get('date_overlay_enabled', 'off') == 'on',
+                'geo_overlay_enabled': request.form.get('geo_overlay_enabled', 'off') == 'on',
                 'date_overlay_position': request.form.get('date_overlay_position', 'bottomRight'),
                 'overlay_style': request.form.get(
                     'overlay_style', current_config['immich'].get('overlay_style', 'background')
