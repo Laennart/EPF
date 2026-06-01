@@ -681,10 +681,10 @@ class ConfigFileHandler(FileSystemEventHandler):
         """Load config"""
         try:
             with open(self.config_path, 'r') as file:
-                return yaml.safe_load(file)
+                config = yaml.safe_load(file)
+            return config if config is not None else DEFAULT_CONFIG
         except Exception as e:
             print(f'Error reading config file: {e}')
-            # Fallback to default configuration if reading fails
             return DEFAULT_CONFIG
 
 
