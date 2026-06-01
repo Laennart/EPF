@@ -712,7 +712,8 @@ def update_app_config(new_config):
         overlay_text_color, \
         overlay_border_color, \
         overlay_stroke_width, \
-        overlay_font_size
+        overlay_font_size, \
+        overlay_language
 
     current_config = new_config
 
@@ -752,6 +753,7 @@ def update_app_config(new_config):
     overlay_border_color = new_config['immich'].get('overlay_border_color', 'white')
     overlay_stroke_width = int(new_config['immich'].get('overlay_stroke_width', 2))
     overlay_font_size = int(new_config['immich'].get('overlay_font_size', 26))
+    overlay_language = new_config['immich'].get('overlay_language', 'en')
 
     print(
         f'Configuration updated: URL = {url}, Album = {albumname}, angle = {rotationAngle}, enhance = {img_enhanced}, contrast = {img_contrast}, strength = {strength}, display_mode = {display_mode}, image_order = {image_order}'
@@ -883,6 +885,9 @@ def settings():
                 ),
                 'overlay_font_size': int(
                     request.form.get('overlay_font_size', current_config['immich'].get('overlay_font_size', 26))
+                ),
+                'overlay_language': request.form.get(
+                    'overlay_language', current_config['immich'].get('overlay_language', 'en')
                 ),
             }
         }
