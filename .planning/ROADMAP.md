@@ -85,9 +85,9 @@ Plans:
 
 **Depends on:** Phase 6
 
-**Plans:** 0/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 07-01-PLAN.md — Wave 0 (TDD RED): tests/test_geo_overlay.py with 12 failing contract tests + synthetic_gps_image/mock_geo_cache_dir fixtures (GEO-01..GEO-12)
-- [ ] 07-02-PLAN.md — TDD GREEN: add geopy==2.4.1; implement extract_gps_from_exif() + reverse_geocode_cached() (JSON cache) + parse_photo_location() (GEO-01..GEO-08)
-- [ ] 07-03-PLAN.md — Integration: extend scale_img_in_memory() with immich_exif_raw + geo/date fallback assembly; wire serve_immich_image; static settings UI note (GEO-09..GEO-12)
+- [x] 07-02-PLAN.md — TDD GREEN: add geopy==2.4.1; implement extract_gps_from_exif() + reverse_geocode_cached() (JSON cache) + parse_photo_location() (GEO-01..GEO-08)
+- [x] 07-03-PLAN.md — Integration: extend scale_img_in_memory() with immich_exif_raw + geo/date fallback assembly; wire serve_immich_image; static settings UI note (GEO-09..GEO-12)
