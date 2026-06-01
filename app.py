@@ -439,7 +439,7 @@ def depalette_image(pixels, palette):
     return indices
 
 
-def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(255, 255, 255), immich_date_raw=None):
+def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(255, 255, 255), immich_date_raw=None, immich_exif_raw=None):
     """
     Process image in memory, return BytesIO object
 
@@ -448,6 +448,7 @@ def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(
     :param target_height: height of epaper
     :param bg_color: background color
     :param immich_date_raw: raw date string from Immich exifInfo.dateTimeOriginal (ISO 8601), or None
+    :param immich_exif_raw: full Immich exifInfo dict (city/country/lat/lon), or None
     :return: BytesIO object
     """
 
@@ -462,6 +463,9 @@ def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(
             date_time_raw = exif.get(36867) or exif.get(306)
     except (AttributeError, Exception):
         date_time_raw = None
+
+    # Preserve pre-transpose image reference for GPS EXIF extraction (GPS survives transpose in metadata)
+    pre_transpose_image = image
 
     # Read correct photo orientation from EXIF
     image = ImageOps.exif_transpose(image)
@@ -519,10 +523,17 @@ def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(
     output_img = convert_image(enhanced_img, dithering_strength=strength)
     output_img = Image.fromarray(output_img, mode='RGB')
 
-    # Date overlay (DO-01 + DO-02 + DO-03 + DO-04). Off by default (D-01); silently hidden when no date (D-03).
+    # Date/geo overlay (D-07/D-19 fallback chain). Off by default (D-01); silently hidden when neither available (D-03).
     if date_overlay_enabled:
+        location_str = parse_photo_location(local_image=pre_transpose_image, immich_exif=immich_exif_raw)
         date_str = parse_photo_date(immich_date_raw) or parse_photo_date(date_time_raw)
-        if date_str:
+        if location_str and date_str:
+            overlay_text = f"{location_str} • {date_str}"
+        elif location_str:
+            overlay_text = location_str
+        else:
+            overlay_text = date_str  # may be None -> overlay hidden
+        if overlay_text:
             try:
                 font = ImageFont.truetype(
                     '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
@@ -532,7 +543,7 @@ def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(
                 font = ImageFont.load_default()
             draw_date_overlay(
                 output_img,
-                date_str,
+                overlay_text,
                 font,
                 date_overlay_position,
                 padding=6,
