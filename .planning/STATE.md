@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Milestone complete
-last_updated: "2026-06-01T18:57:42.425Z"
+last_updated: "2026-06-01T19:15:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 7
@@ -87,6 +87,12 @@ Phase 01 (hardware-port) completed all 3 plans:
 | 07-01 | TDD RED contract tests (GEO-01..GEO-12) | complete |
 | 07-02 | extract_gps_from_exif, reverse_geocode_cached, parse_photo_location | complete |
 | 07-03 | Wire immich_exif_raw into scale_img_in_memory + settings UI | complete |
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260601-tat | Add geo overlay toggle to settings — allow showing date, location, both, or neither | 2026-06-01 | 6cdb4dd | [260601-tat-add-geo-overlay-toggle-to-settings-allow](.planning/quick/260601-tat-add-geo-overlay-toggle-to-settings-allow/) |
 
 ## Accumulated Context
 
