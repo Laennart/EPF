@@ -86,6 +86,87 @@ def parse_photo_date(raw_str):
     return None
 
 
+# ---------------------------------------------------------------------------
+# Geolocation helpers (Phase 7 — D-10..D-16)
+# ---------------------------------------------------------------------------
+
+_GEO_CACHE = None  # lazily-loaded geo_cache.json dict
+
+
+def extract_gps_from_exif(image):
+    """Return (lat_float, lon_float) tuple or None. Never raises."""
+    try:
+        exif = image._getexif()
+        if not exif:
+            return None
+        gps_info = exif.get(34853)
+        if not gps_info:
+            return None
+        lat_dms = gps_info.get(2)
+        lat_ref = gps_info.get(1, 'N')
+        lon_dms = gps_info.get(4)
+        lon_ref = gps_info.get(3, 'E')
+        if not lat_dms or not lon_dms:
+            return None
+        lat = float(lat_dms[0]) + float(lat_dms[1]) / 60.0 + float(lat_dms[2]) / 3600.0
+        lon = float(lon_dms[0]) + float(lon_dms[1]) / 60.0 + float(lon_dms[2]) / 3600.0
+        if lat_ref == 'S':
+            lat = -lat
+        if lon_ref == 'W':
+            lon = -lon
+        return (lat, lon)
+    except (AttributeError, Exception):
+        return None
+
+
+def _geo_cache_path():
+    dest = os.environ.get('IMMICH_PHOTO_DEST', '')
+    base = dest if dest else os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, 'geo_cache.json')
+
+
+def _load_geo_cache():
+    global _GEO_CACHE
+    if _GEO_CACHE is None:
+        try:
+            with open(_geo_cache_path(), 'r', encoding='utf-8') as f:
+                _GEO_CACHE = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            _GEO_CACHE = {}
+    return _GEO_CACHE
+
+
+def _save_geo_cache(cache):
+    try:
+        with open(_geo_cache_path(), 'w', encoding='utf-8') as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f'[WARN] Could not save geo_cache.json: {e}')
+
+
+def reverse_geocode_cached(lat, lon):
+    """Return 'City, Country' string or None. Persistent JSON cache; null cached on failure."""
+    key = f"{round(float(lat), 3)},{round(float(lon), 3)}"
+    cache = _load_geo_cache()
+    if key in cache:
+        return cache[key]
+    result = None
+    try:
+        geolocator = Nominatim(user_agent="epf-photo-frame/1.0", timeout=5)
+        location = geolocator.reverse((lat, lon), exactly_one=True, language='en')
+        if location:
+            addr = location.raw.get('address', {})
+            city = addr.get('city') or addr.get('town') or addr.get('village')
+            country = addr.get('country')
+            if city and country:
+                result = f"{city}, {country}"
+    except (GeocoderTimedOut, GeocoderServiceError, Exception) as e:
+        print(f'[WARN] Nominatim geocoding failed for ({lat},{lon}): {e}')
+    cache[key] = result
+    _save_geo_cache(cache)
+    return result
+
+
 # 9-position anchor lookup for date overlay (DO-04).
 # Each lambda returns (x, y) of the text's top-left given image w/h, text bbox w/h, and padding.
 POSITIONS = {
