@@ -15,8 +15,8 @@ progress:
 
 ## Current Position
 
-Phase: 06 (text-customization-colors-styles-and-border-mode) — COMPLETE
-Plan: 3 of 3 — all plans complete; awaiting verification
+Phase: 07 (geolocation-overlay-from-image-metadata) — IN PROGRESS
+Plan: 3 of 3 — plan 02 complete; plan 03 (scale_img wiring) next
 
 ## Phase 1 Complete
 
@@ -66,6 +66,9 @@ Phase 01 (hardware-port) completed all 3 plans:
 - 6 overlay globals added to update_app_config() global statement with .get() fallback reads; backward compat with old config.yaml (06-03)
 - int() cast on slider values in both update_app_config() and POST handler; prevents type errors when YAML loads values as strings (06-03)
 - Color dropdowns always visible — no JS show/hide; small-text labels describe applicability per style mode (06-03)
+- float() cast on IFDRational DMS components before arithmetic — required for Pillow GPS EXIF parsing (07-02 D-15)
+- Cache key uses round(float(lat),3),round(float(lon),3) — aligns with GEO-07/08 test assertions (07-02 D-12)
+- Nominatim module-level import, function-level instantiation — enables monkeypatching while avoiding module-level instantiation anti-pattern (07-02)
 
 ## Phase 6 Plan Status
 
@@ -74,6 +77,14 @@ Phase 01 (hardware-port) completed all 3 plans:
 | 06-01 | TDD RED contract tests (TC-01..TC-09) | complete |
 | 06-02 | OVERLAY_COLORS, config schema, extended draw_date_overlay() | complete |
 | 06-03 | UI/POST wiring and settings.html | complete |
+
+## Phase 7 Plan Status
+
+| Plan | Name | Status |
+|------|------|--------|
+| 07-01 | TDD RED contract tests (GEO-01..GEO-12) | complete |
+| 07-02 | extract_gps_from_exif, reverse_geocode_cached, parse_photo_location | complete |
+| 07-03 | Wire immich_exif_raw into scale_img_in_memory + settings UI | pending |
 
 ## Accumulated Context
 
