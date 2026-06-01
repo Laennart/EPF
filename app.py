@@ -153,10 +153,10 @@ def reverse_geocode_cached(lat, lon):
         return cache[key]
     result = None
     try:
-        geolocator = Nominatim(user_agent='epf-photo-frame/1.0', timeout=5)
-        location = geolocator.reverse((lat, lon), exactly_one=True, language='en')
+        geolocator = Nominatim(user_agent='epf-photo-frame/1.0', timeout=5)  # type: ignore[arg-type]
+        location = geolocator.reverse((lat, lon), exactly_one=True, language='en')  # type: ignore[arg-type]
         if location:
-            addr = location.raw.get('address', {})
+            addr = location.raw.get('address', {})  # type: ignore[union-attr]
             city = addr.get('city') or addr.get('town') or addr.get('village')
             country = addr.get('country')
             if city and country:
