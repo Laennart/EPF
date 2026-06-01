@@ -18,8 +18,8 @@ GEO-12: Overlay hidden when neither geo nor date available
 """
 
 import json
-from PIL import Image
 
+from PIL import Image
 
 # --- GPS extraction (GEO-01..GEO-03) ----------------------------------------
 
