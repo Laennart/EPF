@@ -48,12 +48,12 @@ DEFAULT_CONFIG = {
         'wakeup_interval': 60,  # Default 60 minutes (1 hour)
         'date_overlay_enabled': False,  # D-01: overlay off by default
         'date_overlay_position': 'bottomRight',  # D-05: default position
-        'overlay_style': 'background',      # D-04/D-14: "background" | "outline"
-        'overlay_bg_color': 'black',        # D-06/D-14: rect fill (background mode)
-        'overlay_text_color': 'white',      # D-06/D-07/D-14: text glyph fill (both modes)
-        'overlay_border_color': 'white',    # D-08/D-14: stroke color (outline mode)
-        'overlay_stroke_width': 2,          # D-09/D-11/D-14: stroke px (outline mode), int
-        'overlay_font_size': 26,            # D-12/D-13/D-14: font px, int
+        'overlay_style': 'background',  # D-04/D-14: "background" | "outline"
+        'overlay_bg_color': 'black',  # D-06/D-14: rect fill (background mode)
+        'overlay_text_color': 'white',  # D-06/D-07/D-14: text glyph fill (both modes)
+        'overlay_border_color': 'white',  # D-08/D-14: stroke color (outline mode)
+        'overlay_stroke_width': 2,  # D-09/D-11/D-14: stroke px (outline mode), int
+        'overlay_font_size': 26,  # D-12/D-13/D-14: font px, int
     }
 }
 
@@ -99,8 +99,13 @@ POSITIONS = {
 
 
 def draw_date_overlay(
-    output_img, text, font, position_str, padding=6, rotation=0,
-    style="background",
+    output_img,
+    text,
+    font,
+    position_str,
+    padding=6,
+    rotation=0,
+    style='background',
     bg_color=(0, 0, 0, 255),
     text_color=(255, 255, 255, 255),
     border_color=(255, 255, 255, 255),
@@ -138,7 +143,7 @@ def draw_date_overlay(
 
     # --- Step 1: measure text in viewer space ---
     _probe = ImageDraw.Draw(Image.new('RGB', (1, 1)))
-    sw = stroke_width if style == "outline" else 0
+    sw = stroke_width if style == 'outline' else 0
     bbox = _probe.textbbox((0, 0), text, font=font, stroke_width=sw)
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
@@ -151,14 +156,17 @@ def draw_date_overlay(
     viewer_canvas = Image.new('RGBA', (vw, vh), (0, 0, 0, 0))
     draw = ImageDraw.Draw(viewer_canvas)
     rect = [x - padding, y - padding, x + tw + padding, y + th + padding]
-    if style == "background":
+    if style == 'background':
         draw.rectangle(rect, fill=bg_color)
         draw.text((x - bbox[0], y - bbox[1]), text, fill=text_color, font=font)
     else:  # outline — no rectangle, stroke provides separation (D-07)
         draw.text(
-            (x - bbox[0], y - bbox[1]), text,
-            fill=text_color, font=font,
-            stroke_width=stroke_width, stroke_fill=border_color,
+            (x - bbox[0], y - bbox[1]),
+            text,
+            fill=text_color,
+            font=font,
+            stroke_width=stroke_width,
+            stroke_fill=border_color,
         )
 
     # --- Step 4: rotate viewer canvas into buffer orientation ---
@@ -236,12 +244,12 @@ palette = [
 
 # Source: palette above (authoritative). String name -> RGBA for overlay color resolution.
 OVERLAY_COLORS = {
-    'black':  (0,   0,   0,   255),
-    'white':  (255, 255, 255, 255),
-    'yellow': (255, 216, 0,   255),
-    'red':    (229, 57,  53,  255),
-    'blue':   (0,   76,  255, 255),
-    'green':  (29,  185, 84,  255),
+    'black': (0, 0, 0, 255),
+    'white': (255, 255, 255, 255),
+    'yellow': (255, 216, 0, 255),
+    'red': (229, 57, 53, 255),
+    'blue': (0, 76, 255, 255),
+    'green': (29, 185, 84, 255),
 }
 
 last_battery_voltage = 0
@@ -417,7 +425,11 @@ def scale_img_in_memory(image, target_width=1200, target_height=1600, bg_color=(
             except (IOError, OSError):
                 font = ImageFont.load_default()
             draw_date_overlay(
-                output_img, date_str, font, date_overlay_position, padding=6,
+                output_img,
+                date_str,
+                font,
+                date_overlay_position,
+                padding=6,
                 rotation=rotation,
                 style=overlay_style,
                 bg_color=OVERLAY_COLORS.get(overlay_bg_color, (0, 0, 0, 255)),
@@ -720,12 +732,24 @@ def settings():
                 ),
                 'date_overlay_enabled': request.form.get('date_overlay_enabled', 'off') == 'on',
                 'date_overlay_position': request.form.get('date_overlay_position', 'bottomRight'),
-                'overlay_style': request.form.get('overlay_style', current_config['immich'].get('overlay_style', 'background')),
-                'overlay_bg_color': request.form.get('overlay_bg_color', current_config['immich'].get('overlay_bg_color', 'black')),
-                'overlay_text_color': request.form.get('overlay_text_color', current_config['immich'].get('overlay_text_color', 'white')),
-                'overlay_border_color': request.form.get('overlay_border_color', current_config['immich'].get('overlay_border_color', 'white')),
-                'overlay_stroke_width': int(request.form.get('overlay_stroke_width', current_config['immich'].get('overlay_stroke_width', 2))),
-                'overlay_font_size': int(request.form.get('overlay_font_size', current_config['immich'].get('overlay_font_size', 26))),
+                'overlay_style': request.form.get(
+                    'overlay_style', current_config['immich'].get('overlay_style', 'background')
+                ),
+                'overlay_bg_color': request.form.get(
+                    'overlay_bg_color', current_config['immich'].get('overlay_bg_color', 'black')
+                ),
+                'overlay_text_color': request.form.get(
+                    'overlay_text_color', current_config['immich'].get('overlay_text_color', 'white')
+                ),
+                'overlay_border_color': request.form.get(
+                    'overlay_border_color', current_config['immich'].get('overlay_border_color', 'white')
+                ),
+                'overlay_stroke_width': int(
+                    request.form.get('overlay_stroke_width', current_config['immich'].get('overlay_stroke_width', 2))
+                ),
+                'overlay_font_size': int(
+                    request.form.get('overlay_font_size', current_config['immich'].get('overlay_font_size', 26))
+                ),
             }
         }
 

@@ -33,8 +33,14 @@ def test_background_mode_uses_bg_color(blank_rgb_image, dejavu_or_default_font):
 
     img = blank_rgb_image
     draw_date_overlay(
-        img, '05.01.2022', dejavu_or_default_font, 'bottomRight', padding=6,
-        style='background', bg_color=(229, 57, 53, 255), text_color=(255, 255, 255, 255),
+        img,
+        '05.01.2022',
+        dejavu_or_default_font,
+        'bottomRight',
+        padding=6,
+        style='background',
+        bg_color=(229, 57, 53, 255),
+        text_color=(255, 255, 255, 255),
     )
     pixels = list(img.getdata())
     assert (229, 57, 53) in pixels  # filled rect uses bg_color
@@ -46,15 +52,28 @@ def test_outline_mode_no_rect(blank_rgb_image, dejavu_or_default_font):
 
     bg_img = blank_rgb_image.copy()
     draw_date_overlay(
-        bg_img, '05.01.2022', dejavu_or_default_font, 'bottomRight', padding=6,
-        style='background', bg_color=(0, 0, 0, 255), text_color=(255, 255, 255, 255),
+        bg_img,
+        '05.01.2022',
+        dejavu_or_default_font,
+        'bottomRight',
+        padding=6,
+        style='background',
+        bg_color=(0, 0, 0, 255),
+        text_color=(255, 255, 255, 255),
     )
     bg_black = list(bg_img.getdata()).count((0, 0, 0))
 
     outline_img = blank_rgb_image.copy()
     draw_date_overlay(
-        outline_img, '05.01.2022', dejavu_or_default_font, 'bottomRight', padding=6,
-        style='outline', text_color=(0, 0, 0, 255), border_color=(0, 0, 0, 255), stroke_width=2,
+        outline_img,
+        '05.01.2022',
+        dejavu_or_default_font,
+        'bottomRight',
+        padding=6,
+        style='outline',
+        text_color=(0, 0, 0, 255),
+        border_color=(0, 0, 0, 255),
+        stroke_width=2,
     )
     outline_black = list(outline_img.getdata()).count((0, 0, 0))
 
@@ -68,8 +87,15 @@ def test_outline_mode_border_color(blank_rgb_image, dejavu_or_default_font):
 
     img = blank_rgb_image
     draw_date_overlay(
-        img, '05.01.2022', dejavu_or_default_font, 'bottomRight', padding=6,
-        style='outline', text_color=(255, 255, 255, 255), border_color=(229, 57, 53, 255), stroke_width=2,
+        img,
+        '05.01.2022',
+        dejavu_or_default_font,
+        'bottomRight',
+        padding=6,
+        style='outline',
+        text_color=(255, 255, 255, 255),
+        border_color=(229, 57, 53, 255),
+        stroke_width=2,
     )
     assert (229, 57, 53) in list(img.getdata())  # stroke uses border_color
 
@@ -81,8 +107,8 @@ def test_default_params_match_current(blank_rgb_image, dejavu_or_default_font):
     img = blank_rgb_image
     draw_date_overlay(img, '05.01.2022', dejavu_or_default_font, 'bottomRight', padding=6)
     pixels = list(img.getdata())
-    assert (0, 0, 0) in pixels         # default bg rect is black
-    assert (255, 255, 255) in pixels   # default text is white
+    assert (0, 0, 0) in pixels  # default bg rect is black
+    assert (255, 255, 255) in pixels  # default text is white
 
 
 def test_stroke_width_zero(blank_rgb_image, dejavu_or_default_font):
@@ -91,8 +117,15 @@ def test_stroke_width_zero(blank_rgb_image, dejavu_or_default_font):
 
     img = blank_rgb_image
     draw_date_overlay(
-        img, '05.01.2022', dejavu_or_default_font, 'bottomRight', padding=6,
-        style='outline', text_color=(255, 255, 255, 255), border_color=(229, 57, 53, 255), stroke_width=0,
+        img,
+        '05.01.2022',
+        dejavu_or_default_font,
+        'bottomRight',
+        padding=6,
+        style='outline',
+        text_color=(255, 255, 255, 255),
+        border_color=(229, 57, 53, 255),
+        stroke_width=0,
     )
     # With stroke_width=0 there is no stroke, so the distinct border_color must NOT appear
     assert (229, 57, 53) not in list(img.getdata())
@@ -134,10 +167,9 @@ def test_update_config_new_keys():
     assert app.overlay_font_size == 40
 
     # backward-compat: a config missing the new keys must NOT raise (.get fallback)
-    legacy = {'immich': {k: v for k, v in app.DEFAULT_CONFIG['immich'].items()
-                         if not k.startswith('overlay_')}}
+    legacy = {'immich': {k: v for k, v in app.DEFAULT_CONFIG['immich'].items() if not k.startswith('overlay_')}}
     app.update_app_config(legacy)
-    assert app.overlay_style == 'background'   # fell back to default
+    assert app.overlay_style == 'background'  # fell back to default
     assert app.overlay_font_size == 26
 
 
