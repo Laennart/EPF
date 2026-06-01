@@ -167,6 +167,28 @@ def reverse_geocode_cached(lat, lon):
     return result
 
 
+def parse_photo_location(local_image=None, immich_exif=None):
+    """Return 'City, Country' string or None.
+
+    Priority: Immich exifInfo city/country first; local GPS EXIF second.
+    Follows parse_photo_date() None-propagation contract.
+    """
+    if immich_exif:
+        city = immich_exif.get('city') or ''
+        country = immich_exif.get('country') or ''
+        if city and country:
+            return f"{city}, {country}"
+        if city:
+            return city
+        if country:
+            return country
+    if local_image is not None:
+        coords = extract_gps_from_exif(local_image)
+        if coords:
+            return reverse_geocode_cached(coords[0], coords[1])
+    return None
+
+
 # 9-position anchor lookup for date overlay (DO-04).
 # Each lambda returns (x, y) of the text's top-left given image w/h, text bbox w/h, and padding.
 POSITIONS = {
