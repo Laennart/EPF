@@ -987,14 +987,18 @@ def open_image_from_path(filepath):
         return Image.open(filepath)
 
 
-def serve_local_image():
-    """Pick a random image from localdir, process it, and return a send_file response."""
+def _process_local_image_to_bytes():
+    """Select and process a random local image; return (BytesIO c_code, stem).
+
+    Raises RuntimeError instead of returning a Flask Response so the background
+    pre-fetch thread can catch exceptions cleanly.
+    """
     if not os.path.isdir(localdir):
-        return jsonify({'error': f'Local photo directory not found: {localdir}'}), 500
+        raise RuntimeError(f'Local photo directory not found: {localdir}')
 
     candidates = [f for f in os.listdir(localdir) if os.path.splitext(f)[1].lower() in ALLOWED_EXTENSIONS]
     if not candidates:
-        return jsonify({'error': 'No supported images found in local directory'}), 404
+        raise RuntimeError('No supported images found in local directory')
 
     filename = random.choice(candidates)
     filepath = os.path.join(localdir, filename)
@@ -1005,38 +1009,55 @@ def serve_local_image():
     c_code = convert_to_c_code_in_memory(Image.open(processed_image))
 
     stem = os.path.splitext(filename)[0]
+    return (c_code, stem)
+
+
+def serve_local_image():
+    """Thin wrapper: pick a random local image and return a send_file response."""
+    try:
+        c_code, stem = _process_local_image_to_bytes()
+    except RuntimeError as e:
+        msg = str(e)
+        code = 404 if 'No supported images' in msg else 500
+        return jsonify({'error': msg}), code
     return send_file(c_code, mimetype='text/plain', as_attachment=True, download_name=f'image_{stem}.c')
 
 
-def serve_immich_image():
-    """Pick an image from Immich, process it, and return a send_file response."""
+def _process_immich_image_to_bytes():
+    """Select and process an Immich image; return (BytesIO c_code, asset_id).
+
+    Raises RuntimeError instead of returning a Flask Response so the background
+    pre-fetch thread can catch exceptions cleanly.
+
+    Error message to HTTP status mapping for serve_immich_image():
+    - 'Album not found' / 'No images found' → 404
+    - all other errors → 500
+    """
     current_url = url
     current_albumname = albumname
 
     if not current_url or not current_albumname:
-        return jsonify({'error': 'Immich URL or Album not configured'}), 500
+        raise RuntimeError('Immich URL or Album not configured')
 
     downloaded_images = load_downloaded_images()
 
     response = requests.get(f'{current_url}/api/albums', headers=headers, params={'withoutAssets': 'true'})
     if response.status_code != 200:
         print(f'[ERROR] GET /api/albums → HTTP {response.status_code}: {response.text[:500]}')
-        return jsonify(
-            {'error': 'Failed to fetch albums', 'status': response.status_code, 'detail': response.text[:500]}
-        ), 500
+        raise RuntimeError(f'Failed to fetch albums (HTTP {response.status_code})')
 
     data = response.json()
     albumid = next((item['id'] for item in data if item['albumName'] == current_albumname), None)
     if not albumid:
-        return jsonify({'error': 'Album not found'}), 404
+        raise RuntimeError('Album not found')
 
     response = requests.get(f'{url}/api/albums/{albumid}', headers=headers)
     if response.status_code != 200:
-        return jsonify({'error': 'Failed to fetch album details'}), 500
+        raise RuntimeError('Failed to fetch album details')
 
     data = response.json()
     if 'assets' not in data or not data['assets']:
-        return jsonify({'error': 'No images found in album'}), 404
+        raise RuntimeError('No images found in album')
 
     current_image_order = current_config['immich']['image_order']
 
@@ -1073,7 +1094,7 @@ def serve_immich_image():
     print(f'{url}/api/assets/{asset_id}/original')
     response = requests.get(f'{url}/api/assets/{asset_id}/original', headers=headers, stream=True)
     if response.status_code != 200:
-        return jsonify({'error': 'Failed to download image'}), 500
+        raise RuntimeError('Failed to download image')
 
     image_data = io.BytesIO(response.content)
     if selected_image['originalPath'].lower().endswith(('.raw', '.dng', '.arw', '.cr2', '.nef')):
@@ -1094,6 +1115,18 @@ def serve_immich_image():
     processed_image.seek(0)
     c_code = convert_to_c_code_in_memory(Image.open(processed_image))
 
+    return (c_code, asset_id)
+
+
+def serve_immich_image():
+    """Thin wrapper: pick an Immich image and return a send_file response."""
+    try:
+        c_code, asset_id = _process_immich_image_to_bytes()
+    except RuntimeError as e:
+        msg = str(e)
+        # Map specific messages to 404; everything else is 500
+        code = 404 if ('not found' in msg.lower() or 'No images found' in msg) else 500
+        return jsonify({'error': msg}), code
     return send_file(c_code, mimetype='text/plain', as_attachment=True, download_name=f'image_{asset_id}.c')
 
 
