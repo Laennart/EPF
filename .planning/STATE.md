@@ -15,8 +15,8 @@ progress:
 
 ## Current Position
 
-Phase: 07
-Plan: Not started
+Phase: 08
+Plan: 03
 
 ## Phase 1 Complete
 
@@ -71,6 +71,18 @@ Phase 01 (hardware-port) completed all 3 plans:
 - Nominatim module-level import, function-level instantiation — enables monkeypatching while avoiding module-level instantiation anti-pattern (07-02)
 - pre_transpose_image captured before exif_transpose so GPS EXIF safely readable from original image object (07-03)
 - serve_immich_image passes selected_image.get('exifInfo', {}) (empty dict, not None) for consistent type in parse_photo_location (07-03)
+- require_auth reads APP_PASSWORD at call time (not capture time) — allows monkeypatching in tests (08-02)
+- @require_auth stacked below @app.route so Flask registers original function name (avoids 404s on protected routes) (08-02)
+- hmac.compare_digest used instead of == for constant-time timing-safe password comparison (08-02 AUTH-07)
+- Username hardcoded as 'admin' per D-03 — no APP_USERNAME env var to keep auth surface minimal (08-02)
+
+## Phase 8 Plan Status
+
+| Plan | Name | Status |
+|------|------|--------|
+| 08-01 | TDD RED contract tests (AUTH-01..AUTH-08) | complete |
+| 08-02 | require_auth decorator + APP_PASSWORD + documentation | complete |
+| 08-03 | Arduino HTTPClient auth + firmware documentation | not started |
 
 ## Phase 6 Plan Status
 

@@ -103,6 +103,6 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — Wave 0 (TDD RED): tests/test_auth.py with 8 failing contract tests (AUTH-01..AUTH-08)
-- [ ] 08-02-PLAN.md — TDD GREEN: require_auth decorator + APP_PASSWORD + protect 4 routes; document in compose.yml/.env.example/README (AUTH-01..05, 07, 08)
+- [x] 08-01-PLAN.md — Wave 0 (TDD RED): tests/test_auth.py with 8 failing contract tests (AUTH-01..AUTH-08)
+- [x] 08-02-PLAN.md — TDD GREEN: require_auth decorator + APP_PASSWORD + protect 4 routes; document in compose.yml/.env.example/README (AUTH-01..05, 07, 08)
 - [ ] 08-03-PLAN.md — Firmware setAuthorization() on http + sleepHttp clients + config.h constant; human verify browser dialog + device fetch (AUTH-06, AUTH-09, AUTH-10)
