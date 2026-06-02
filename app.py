@@ -1,6 +1,6 @@
 # -*- coding:utf8 -*-
-import hmac
 import hashlib
+import hmac
 import io
 import json
 import os
