@@ -100,7 +100,7 @@ Plans:
 
 **Depends on:** Phase 7
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 - [x] 08-01-PLAN.md — Wave 0 (TDD RED): tests/test_auth.py with 8 failing contract tests (AUTH-01..AUTH-08)
