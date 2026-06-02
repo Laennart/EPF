@@ -53,3 +53,20 @@ def mock_geo_cache_dir(tmp_path, monkeypatch):
     import app
     monkeypatch.setattr(app, '_GEO_CACHE', None, raising=False)
     return tmp_path
+
+
+@pytest.fixture
+def reset_prefetch_state(monkeypatch):
+    """Reset app pre-fetch module state to empty before each test.
+
+    Uses raising=False so the fixture is safe during the RED phase
+    when these attributes do not yet exist on the app module.
+    """
+    import app
+    monkeypatch.setattr(
+        app, '_prefetch_cache',
+        {'path': None, 'asset_id': None, 'config_hash': None},
+        raising=False,
+    )
+    monkeypatch.setattr(app, '_prefetch_thread', None, raising=False)
+    return app
