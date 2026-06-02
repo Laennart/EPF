@@ -167,6 +167,10 @@ Install these from **Tools → Manage Libraries…**:
 
 ### Build and flash
 
+> **Auth:** If you set `APP_PASSWORD` on the server, set the matching `APP_PASSWORD` constant
+> in `epd7in3e/config.h` before flashing so the device can authenticate. Leave it `""` if the
+> server has no password.
+
 1. Open `epd7in3e/epd7in3e.ino`
 2. Click **Verify** to confirm the toolchain finds all libraries, then **Upload**.
 3. Open the serial monitor at 115200 baud. The first boot will log `e-Paper initialized successfully (Seeed_GFX)` and then enter captive-portal mode (no WiFi credentials stored).
