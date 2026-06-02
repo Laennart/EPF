@@ -11,6 +11,7 @@ AUTH-04: APP_PASSWORD read from environment
 AUTH-06: correct credentials -> route returns 200 (admin:secret)
 AUTH-08: failed auth attempt logged at WARNING level
 """
+
 import base64
 import importlib
 import logging
@@ -92,7 +93,4 @@ def test_failed_auth_is_logged(auth_client, caplog):
     """AUTH-08: a failed authentication attempt is logged at WARNING level."""
     with caplog.at_level(logging.WARNING):
         auth_client.get('/setting', headers=_basic_header(password='wrong'))
-    assert any(
-        record.levelname == 'WARNING' and 'uth' in record.getMessage()
-        for record in caplog.records
-    )
+    assert any(record.levelname == 'WARNING' and 'uth' in record.getMessage() for record in caplog.records)

@@ -379,21 +379,19 @@ def require_auth(f):
     Opt-in: when APP_PASSWORD is empty/absent, all requests pass through.
     Returns 401 + WWW-Authenticate header on missing or wrong credentials.
     """
+
     @wraps(f)
     def decorated(*args, **kwargs):
         if not APP_PASSWORD:
             return f(*args, **kwargs)
         auth = request.authorization
-        if (
-            auth
-            and auth.username == 'admin'
-            and hmac.compare_digest(auth.password or '', APP_PASSWORD)
-        ):
+        if auth and auth.username == 'admin' and hmac.compare_digest(auth.password or '', APP_PASSWORD):
             return f(*args, **kwargs)
         app.logger.warning('Auth failed from %s', request.remote_addr)
         response = make_response('Unauthorized', 401)
         response.headers['WWW-Authenticate'] = 'Basic realm="EPF"'
         return response
+
     return decorated
 
 
