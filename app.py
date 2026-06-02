@@ -1049,6 +1049,9 @@ def main():
         ntp_sync_thread = threading.Thread(target=run_daily_ntp_sync, daemon=True)
         ntp_sync_thread.start()
 
+        # Phase 9: warm the pre-fetch cache before the first device request (PRE-01, D-01)
+        _trigger_prefetch()
+
         # Run Flask application in a separate thread
         app.run(host='0.0.0.0', port=5000, use_reloader=False)
     except KeyboardInterrupt:
@@ -1225,6 +1228,30 @@ def process_and_download():
     except (TypeError, ValueError):
         pass
 
+    # Phase 9: serve pre-fetched image if ready (PRE-03), else fall back (PRE-04)
+    with _prefetch_lock:
+        cached_path = _prefetch_cache['path']
+        if cached_path:
+            _prefetch_cache['path'] = None  # one-shot consume
+
+    if cached_path and os.path.exists(cached_path):
+        try:
+            with open(cached_path, 'rb') as fh:
+                c_bytes = fh.read()
+            try:
+                os.unlink(cached_path)
+            except OSError:
+                pass
+            _trigger_prefetch()  # warm next image (PRE-02)
+            return send_file(
+                io.BytesIO(c_bytes),
+                mimetype='text/plain',
+                as_attachment=True,
+                download_name='image.c',
+            )
+        except OSError as exc:
+            app.logger.warning('[prefetch] Cache read failed, falling back: %s', exc)
+
     try:
         # Local folder takes priority when it contains at least one image.
         # Fall back to Immich when IMMICH_API_KEY is present.
@@ -1232,13 +1259,15 @@ def process_and_download():
             os.path.splitext(f)[1].lower() in ALLOWED_EXTENSIONS for f in os.listdir(localdir)
         )
         if local_has_images:
-            return serve_local_image()
+            response = serve_local_image()
         elif apikey:
-            return serve_immich_image()
+            response = serve_immich_image()
         else:
             return jsonify(
                 {'error': 'No image source configured. Add images to local_photos/ or set IMMICH_API_KEY.'}
             ), 500
+        _trigger_prefetch()  # warm next image after on-demand serve (PRE-02)
+        return response
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500

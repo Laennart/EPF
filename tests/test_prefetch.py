@@ -93,12 +93,16 @@ def test_download_triggers_prefetch(reset_prefetch_state, monkeypatch):
     monkeypatch.setattr(app_module, 'serve_local_image', fake_serve_local, raising=False)
     monkeypatch.setattr(app_module, 'serve_immich_image', fake_serve_immich, raising=False)
 
-    # Force the local-images path so the route uses serve_local_image
+    # Force the local-images path so the route uses serve_local_image.
+    # NOTE: create test_client() before patching os.path.isdir/os.listdir so that
+    # werkzeug's importlib.metadata internal path discovery is not disrupted
+    # (Python 3.9 importlib.metadata uses isdir to locate package metadata).
     monkeypatch.setattr(app_module, 'localdir', '/tmp/__epf_fake_local__', raising=False)
-    monkeypatch.setattr(os.path, 'isdir', lambda p: True)
-    monkeypatch.setattr(os, 'listdir', lambda p: ['a.jpg'])
 
     with app_module.app.test_client() as c:
+        # Apply os patches only inside the request, after test client is initialised
+        monkeypatch.setattr(os.path, 'isdir', lambda p: True)
+        monkeypatch.setattr(os, 'listdir', lambda p: ['a.jpg'])
         resp = c.get('/download')
 
     assert resp.status_code == 200
