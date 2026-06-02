@@ -75,6 +75,9 @@ Phase 01 (hardware-port) completed all 3 plans:
 - _invalidate_prefetch_cache replaces entire _prefetch_cache dict under lock — immutable update pattern (09-02)
 - prefetch_next_image uses BLE001 noqa broad except — background daemon thread must never propagate exceptions (09-02)
 - update_app_config hook (_invalidate_prefetch_cache + _trigger_prefetch) at end of body — Python name resolution is at call time, not definition time (09-02)
+- One-shot consume: _prefetch_cache['path'] set to None under lock before reading file — prevents concurrent double-serve without holding lock during I/O (09-03)
+- Read file into BytesIO before os.unlink — avoids send_file streaming while file is unlinked; safe on all platforms (09-03)
+- test_download_triggers_prefetch: moved os.path.isdir/os.listdir monkeypatching inside test_client() context — Python 3.9 importlib.metadata uses isdir for package discovery; pre-patch broke werkzeug metadata lookup (09-03)
 
 ## Phase 6 Plan Status
 
@@ -105,7 +108,7 @@ Phase 01 (hardware-port) completed all 3 plans:
 |------|------|--------|
 | 09-01 | TDD RED contract tests (PRE-01..PRE-10) | complete |
 | 09-02 | Refactor serve_* helpers + pre-fetch cache engine | complete |
-| 09-03 | /download consume path + main() startup warm | pending |
+| 09-03 | /download consume path + main() startup warm | tasks 1-2 complete; awaiting human-verify |
 
 ## Accumulated Context
 
