@@ -106,3 +106,18 @@ Plans:
 - [x] 08-01-PLAN.md — Wave 0 (TDD RED): tests/test_auth.py with 8 failing contract tests (AUTH-01..AUTH-08)
 - [x] 08-02-PLAN.md — TDD GREEN: require_auth decorator + APP_PASSWORD + protect 4 routes; document in compose.yml/.env.example/README (AUTH-01..05, 07, 08)
 - [ ] 08-03-PLAN.md — Firmware setAuthorization() on http + sleepHttp clients + config.h constant; human verify browser dialog + device fetch (AUTH-06, AUTH-09, AUTH-10)
+
+### Phase 9: Image Pre-fetch
+
+**Goal:** Pre-process the next image in a background daemon thread so a ready-to-serve `.c` file is waiting when the ESP32 calls `/download`, eliminating the per-request processing delay. The image-processing core is extracted from the Flask handlers into pure `_process_*_to_bytes()` helpers; a lock-guarded module-level cache (`_prefetch_cache`) holds the pre-rendered temp file. Pre-fetch triggers on startup and after every `/download` (D-01); the file lives in `/tmp` via `tempfile` (D-02); any `config.yaml` change invalidates and re-warms the cache (D-04). On a cold/empty cache, `/download` falls back silently to on-demand processing with no error (D-06); the background thread logs failures at WARN and never retries (D-07). All stdlib — no new dependencies.
+
+**Requirements:** PRE-01, PRE-02, PRE-03, PRE-04, PRE-05, PRE-06, PRE-07, PRE-08, PRE-09, PRE-10
+
+**Depends on:** Phase 8
+
+**Plans:** 3 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — Wave 0 (TDD RED): tests/test_prefetch.py with 10 failing contract tests + reset_prefetch_state fixture (PRE-01..PRE-10)
+- [ ] 09-02-PLAN.md — Refactor serve_* into _process_*_to_bytes() helpers; add cache state, worker thread, config-hash, invalidation hook in update_app_config (PRE-05..PRE-10)
+- [ ] 09-03-PLAN.md — Wire /download cache-hit/consume path + on-demand fallback re-trigger + startup warm in main(); human verify live behavior (PRE-01..PRE-04)
