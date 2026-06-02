@@ -15,8 +15,8 @@ progress:
 
 ## Current Position
 
-Phase: 07
-Plan: Not started
+Phase: 09-image-prefetch
+Plan: 03 (next to execute)
 
 ## Phase 1 Complete
 
@@ -71,6 +71,10 @@ Phase 01 (hardware-port) completed all 3 plans:
 - Nominatim module-level import, function-level instantiation — enables monkeypatching while avoiding module-level instantiation anti-pattern (07-02)
 - pre_transpose_image captured before exif_transpose so GPS EXIF safely readable from original image object (07-03)
 - serve_immich_image passes selected_image.get('exifInfo', {}) (empty dict, not None) for consistent type in parse_photo_location (07-03)
+- _process_immich_image_to_bytes raises RuntimeError instead of jsonify — enables background thread to catch cleanly without Flask context (09-02)
+- _invalidate_prefetch_cache replaces entire _prefetch_cache dict under lock — immutable update pattern (09-02)
+- prefetch_next_image uses BLE001 noqa broad except — background daemon thread must never propagate exceptions (09-02)
+- update_app_config hook (_invalidate_prefetch_cache + _trigger_prefetch) at end of body — Python name resolution is at call time, not definition time (09-02)
 
 ## Phase 6 Plan Status
 
@@ -94,6 +98,14 @@ Phase 01 (hardware-port) completed all 3 plans:
 |---|-------------|------|--------|-----------|
 | 260601-tat | Add geo overlay toggle to settings — allow showing date, location, both, or neither | 2026-06-01 | 6cdb4dd | [260601-tat-add-geo-overlay-toggle-to-settings-allow](.planning/quick/260601-tat-add-geo-overlay-toggle-to-settings-allow/) |
 | 260601-udz | Add language switching for geo-location overlay | 2026-06-01 | 532bcb5 | [260601-udz-add-language-switching-for-geo-location-](.planning/quick/260601-udz-add-language-switching-for-geo-location-/) |
+
+## Phase 9 Plan Status
+
+| Plan | Name | Status |
+|------|------|--------|
+| 09-01 | TDD RED contract tests (PRE-01..PRE-10) | complete |
+| 09-02 | Refactor serve_* helpers + pre-fetch cache engine | complete |
+| 09-03 | /download consume path + main() startup warm | pending |
 
 ## Accumulated Context
 
