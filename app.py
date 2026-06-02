@@ -1049,6 +1049,9 @@ def main():
         ntp_sync_thread = threading.Thread(target=run_daily_ntp_sync, daemon=True)
         ntp_sync_thread.start()
 
+        # Phase 9: warm the pre-fetch cache before the first device request (PRE-01, D-01)
+        _trigger_prefetch()
+
         # Run Flask application in a separate thread
         app.run(host='0.0.0.0', port=5000, use_reloader=False)
     except KeyboardInterrupt:
