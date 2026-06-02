@@ -5,7 +5,7 @@ milestone_name: milestone
 status: Ready to execute
 last_updated: "2026-06-02T07:56:23.268Z"
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 7
   total_plans: 21
   completed_plans: 19
@@ -114,3 +114,4 @@ Phase 01 (hardware-port) completed all 3 plans:
 - Phase 6 added: Text customization — colors, styles, and border mode (timestamp background color, text color, border style option with configurable border/text color; all exposed in Configuration UI)
 - Phase 7 added: Geolocation overlay from image metadata — extend overlay to show rough location from EXIF/Immich API; fall back to timestamp if no geo info present
 - Phase 8 added: Auth — secure access to the app so it's not simply open in the local network without any access control
+- Phase 9 added: Image Pre-fetch — pre-process the next image on the server so it is ready immediately when the device requests it, eliminating the current per-request processing delay
