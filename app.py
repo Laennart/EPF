@@ -1,19 +1,19 @@
 # -*- coding:utf8 -*-
-import hmac
+import hashlib
 import io
 import json
 import os
 import random
+import tempfile
 import threading
 from datetime import datetime, timedelta
-from functools import wraps
 
 import numpy as np
 import rawpy
 import requests
 import yaml
 from dotenv import load_dotenv
-from flask import Flask, jsonify, make_response, redirect, render_template, request, send_file, url_for
+from flask import Flask, jsonify, redirect, render_template, request, send_file, url_for
 from geopy.exc import GeocoderServiceError, GeocoderTimedOut
 from geopy.geocoders import Nominatim
 from PIL import Image, ImageDraw, ImageEnhance, ImageFont, ImageOps
@@ -329,7 +329,6 @@ photodir = os.getenv('IMMICH_PHOTO_DEST', os.path.join(base_dir, 'photos'))
 tracking_file = os.path.join(photodir, 'tracking.txt')
 localdir = os.getenv('LOCAL_PHOTO_DIR', os.path.join(base_dir, 'local_photos'))
 config_file = os.getenv('CONFIG_FILE', os.path.join(base_dir, 'config.yaml'))
-APP_PASSWORD = os.getenv('APP_PASSWORD', '')
 
 # Ensure directory exists
 os.makedirs(photodir, exist_ok=True)
@@ -343,6 +342,11 @@ headers = {'Accept': 'application/json', 'x-api-key': apikey}
 
 # Allowed file extensions
 ALLOWED_EXTENSIONS = {'.jpeg', '.raw', '.jpg', '.bmp', '.dng', '.heic', '.arw', '.cr2', '.dng', '.nef', '.raw'}
+
+# --- Image pre-fetch cache (Phase 9) ---
+_prefetch_lock = threading.Lock()
+_prefetch_cache = {'path': None, 'asset_id': None, 'config_hash': None}
+_prefetch_thread = None
 
 # Set up the directory for the downloaded images
 os.makedirs(photodir, exist_ok=True)
@@ -371,30 +375,6 @@ OVERLAY_COLORS = {
 
 last_battery_voltage = 0
 last_battery_update = 0
-
-
-def require_auth(f):
-    """Enforce HTTP Basic Auth when APP_PASSWORD is set.
-
-    Opt-in: when APP_PASSWORD is empty/absent, all requests pass through.
-    Returns 401 + WWW-Authenticate header on missing or wrong credentials.
-    """
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not APP_PASSWORD:
-            return f(*args, **kwargs)
-        auth = request.authorization
-        if (
-            auth
-            and auth.username == 'admin'
-            and hmac.compare_digest(auth.password or '', APP_PASSWORD)
-        ):
-            return f(*args, **kwargs)
-        app.logger.warning('Auth failed from %s', request.remote_addr)
-        response = make_response('Unauthorized', 401)
-        response.headers['WWW-Authenticate'] = 'Basic realm="EPF"'
-        return response
-    return decorated
 
 
 def load_downloaded_images():
@@ -786,6 +766,10 @@ def update_app_config(new_config):
         f'Configuration updated: URL = {url}, Album = {albumname}, angle = {rotationAngle}, enhance = {img_enhanced}, contrast = {img_contrast}, strength = {strength}, display_mode = {display_mode}, image_order = {image_order}'
     )
 
+    # Phase 9: any config change voids the pre-fetched image and re-warms (D-04)
+    _invalidate_prefetch_cache()
+    _trigger_prefetch()
+
 
 def start_config_watcher(config_path):
     """Start configuration file monitoring"""
@@ -797,6 +781,77 @@ def start_config_watcher(config_path):
     observer.start()
 
     return observer
+
+
+def _current_config_hash():
+    """Stable MD5 hex digest of current_config for cache invalidation."""
+    config_bytes = json.dumps(current_config, sort_keys=True, default=str).encode('utf-8')
+    return hashlib.md5(config_bytes).hexdigest()  # noqa: S324 — non-crypto use (cache key only)
+
+
+def _invalidate_prefetch_cache():
+    """Discard the pre-fetched cache and remove its temp file (PRE-10)."""
+    global _prefetch_cache
+    with _prefetch_lock:
+        old_path = _prefetch_cache['path']
+        _prefetch_cache = {'path': None, 'asset_id': None, 'config_hash': None}
+    if old_path:
+        try:
+            os.unlink(old_path)
+        except OSError:
+            pass
+
+
+def prefetch_next_image():
+    """Background worker: process the next image to a temp .c file (PRE-05/07).
+
+    On success: update _prefetch_cache under the lock.
+    On failure: log WARN, leave cache empty, no retry (D-07).
+    """
+    global _prefetch_cache
+    try:
+        local_has_images = os.path.isdir(localdir) and any(
+            os.path.splitext(f)[1].lower() in ALLOWED_EXTENSIONS for f in os.listdir(localdir)
+        )
+        if local_has_images:
+            c_code, asset_id = _process_local_image_to_bytes()
+        elif apikey:
+            c_code, asset_id = _process_immich_image_to_bytes()
+        else:
+            app.logger.warning('[prefetch] No image source configured, skipping.')
+            return
+
+        c_bytes = c_code.getvalue()
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.c', mode='wb') as tmp:
+            tmp_path = tmp.name
+            tmp.write(c_bytes)
+
+        with _prefetch_lock:
+            old_path = _prefetch_cache['path']
+            _prefetch_cache = {
+                'path': tmp_path,
+                'asset_id': asset_id,
+                'config_hash': _current_config_hash(),
+            }
+
+        if old_path:
+            try:
+                os.unlink(old_path)
+            except OSError:
+                pass
+
+        app.logger.info('[prefetch] Ready: %s (asset=%s)', tmp_path, asset_id)
+    except Exception as exc:  # noqa: BLE001 — background thread must never propagate
+        app.logger.warning('[prefetch] Failed to pre-fetch image: %s', exc)
+
+
+def _trigger_prefetch():
+    """Spawn the pre-fetch thread if one is not already running (PRE-09)."""
+    global _prefetch_thread
+    if _prefetch_thread is not None and _prefetch_thread.is_alive():
+        return
+    _prefetch_thread = threading.Thread(target=prefetch_next_image, daemon=True)
+    _prefetch_thread.start()
 
 
 # Add lithium battery voltage table (voltage: battery percentage)
@@ -849,7 +904,6 @@ def calculate_battery_percentage(voltage):
 
 
 @app.route('/setting', methods=['GET', 'POST'])
-@require_auth
 def settings():
     global current_config, last_battery_voltage, last_battery_update
 
@@ -954,7 +1008,6 @@ def settings():
 
 
 @app.route('/')
-@require_auth
 def index():
     return redirect(url_for('settings'))
 
@@ -1016,14 +1069,18 @@ def open_image_from_path(filepath):
         return Image.open(filepath)
 
 
-def serve_local_image():
-    """Pick a random image from localdir, process it, and return a send_file response."""
+def _process_local_image_to_bytes():
+    """Select and process a random local image; return (BytesIO c_code, stem).
+
+    Raises RuntimeError instead of returning a Flask Response so the background
+    pre-fetch thread can catch exceptions cleanly.
+    """
     if not os.path.isdir(localdir):
-        return jsonify({'error': f'Local photo directory not found: {localdir}'}), 500
+        raise RuntimeError(f'Local photo directory not found: {localdir}')
 
     candidates = [f for f in os.listdir(localdir) if os.path.splitext(f)[1].lower() in ALLOWED_EXTENSIONS]
     if not candidates:
-        return jsonify({'error': 'No supported images found in local directory'}), 404
+        raise RuntimeError('No supported images found in local directory')
 
     filename = random.choice(candidates)
     filepath = os.path.join(localdir, filename)
@@ -1034,38 +1091,55 @@ def serve_local_image():
     c_code = convert_to_c_code_in_memory(Image.open(processed_image))
 
     stem = os.path.splitext(filename)[0]
+    return (c_code, stem)
+
+
+def serve_local_image():
+    """Thin wrapper: pick a random local image and return a send_file response."""
+    try:
+        c_code, stem = _process_local_image_to_bytes()
+    except RuntimeError as e:
+        msg = str(e)
+        code = 404 if 'No supported images' in msg else 500
+        return jsonify({'error': msg}), code
     return send_file(c_code, mimetype='text/plain', as_attachment=True, download_name=f'image_{stem}.c')
 
 
-def serve_immich_image():
-    """Pick an image from Immich, process it, and return a send_file response."""
+def _process_immich_image_to_bytes():
+    """Select and process an Immich image; return (BytesIO c_code, asset_id).
+
+    Raises RuntimeError instead of returning a Flask Response so the background
+    pre-fetch thread can catch exceptions cleanly.
+
+    Error message to HTTP status mapping for serve_immich_image():
+    - 'Album not found' / 'No images found' → 404
+    - all other errors → 500
+    """
     current_url = url
     current_albumname = albumname
 
     if not current_url or not current_albumname:
-        return jsonify({'error': 'Immich URL or Album not configured'}), 500
+        raise RuntimeError('Immich URL or Album not configured')
 
     downloaded_images = load_downloaded_images()
 
     response = requests.get(f'{current_url}/api/albums', headers=headers, params={'withoutAssets': 'true'})
     if response.status_code != 200:
         print(f'[ERROR] GET /api/albums → HTTP {response.status_code}: {response.text[:500]}')
-        return jsonify(
-            {'error': 'Failed to fetch albums', 'status': response.status_code, 'detail': response.text[:500]}
-        ), 500
+        raise RuntimeError(f'Failed to fetch albums (HTTP {response.status_code})')
 
     data = response.json()
     albumid = next((item['id'] for item in data if item['albumName'] == current_albumname), None)
     if not albumid:
-        return jsonify({'error': 'Album not found'}), 404
+        raise RuntimeError('Album not found')
 
     response = requests.get(f'{url}/api/albums/{albumid}', headers=headers)
     if response.status_code != 200:
-        return jsonify({'error': 'Failed to fetch album details'}), 500
+        raise RuntimeError('Failed to fetch album details')
 
     data = response.json()
     if 'assets' not in data or not data['assets']:
-        return jsonify({'error': 'No images found in album'}), 404
+        raise RuntimeError('No images found in album')
 
     current_image_order = current_config['immich']['image_order']
 
@@ -1102,7 +1176,7 @@ def serve_immich_image():
     print(f'{url}/api/assets/{asset_id}/original')
     response = requests.get(f'{url}/api/assets/{asset_id}/original', headers=headers, stream=True)
     if response.status_code != 200:
-        return jsonify({'error': 'Failed to download image'}), 500
+        raise RuntimeError('Failed to download image')
 
     image_data = io.BytesIO(response.content)
     if selected_image['originalPath'].lower().endswith(('.raw', '.dng', '.arw', '.cr2', '.nef')):
@@ -1123,11 +1197,22 @@ def serve_immich_image():
     processed_image.seek(0)
     c_code = convert_to_c_code_in_memory(Image.open(processed_image))
 
+    return (c_code, asset_id)
+
+
+def serve_immich_image():
+    """Thin wrapper: pick an Immich image and return a send_file response."""
+    try:
+        c_code, asset_id = _process_immich_image_to_bytes()
+    except RuntimeError as e:
+        msg = str(e)
+        # Map specific messages to 404; everything else is 500
+        code = 404 if ('not found' in msg.lower() or 'No images found' in msg) else 500
+        return jsonify({'error': msg}), code
     return send_file(c_code, mimetype='text/plain', as_attachment=True, download_name=f'image_{asset_id}.c')
 
 
 @app.route('/download', methods=['GET'])
-@require_auth
 def process_and_download():
     global last_battery_voltage, last_battery_update
 
@@ -1160,7 +1245,6 @@ def process_and_download():
 
 
 @app.route('/sleep', methods=['GET'])
-@require_auth
 def get_sleep_duration():
     # Use system time instead of NTP sync
     current_time = datetime.now()

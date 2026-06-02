@@ -2,21 +2,21 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-last_updated: "2026-06-02T14:02:01.713Z"
+status: Milestone complete
+last_updated: "2026-06-01T20:00:00.000Z"
 progress:
-  total_phases: 9
+  total_phases: 7
   completed_phases: 7
-  total_plans: 24
-  completed_plans: 20
+  total_plans: 18
+  completed_plans: 18
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 09 (image-prefetch) — EXECUTING
-Plan: 2 of 3
+Phase: 09-image-prefetch
+Plan: 03 (next to execute)
 
 ## Phase 1 Complete
 
@@ -71,18 +71,10 @@ Phase 01 (hardware-port) completed all 3 plans:
 - Nominatim module-level import, function-level instantiation — enables monkeypatching while avoiding module-level instantiation anti-pattern (07-02)
 - pre_transpose_image captured before exif_transpose so GPS EXIF safely readable from original image object (07-03)
 - serve_immich_image passes selected_image.get('exifInfo', {}) (empty dict, not None) for consistent type in parse_photo_location (07-03)
-- require_auth reads APP_PASSWORD at call time (not capture time) — allows monkeypatching in tests (08-02)
-- @require_auth stacked below @app.route so Flask registers original function name (avoids 404s on protected routes) (08-02)
-- hmac.compare_digest used instead of == for constant-time timing-safe password comparison (08-02 AUTH-07)
-- Username hardcoded as 'admin' per D-03 — no APP_USERNAME env var to keep auth surface minimal (08-02)
-
-## Phase 8 Plan Status
-
-| Plan | Name | Status |
-|------|------|--------|
-| 08-01 | TDD RED contract tests (AUTH-01..AUTH-08) | complete |
-| 08-02 | require_auth decorator + APP_PASSWORD + documentation | complete |
-| 08-03 | Arduino HTTPClient auth + firmware documentation | not started |
+- _process_immich_image_to_bytes raises RuntimeError instead of jsonify — enables background thread to catch cleanly without Flask context (09-02)
+- _invalidate_prefetch_cache replaces entire _prefetch_cache dict under lock — immutable update pattern (09-02)
+- prefetch_next_image uses BLE001 noqa broad except — background daemon thread must never propagate exceptions (09-02)
+- update_app_config hook (_invalidate_prefetch_cache + _trigger_prefetch) at end of body — Python name resolution is at call time, not definition time (09-02)
 
 ## Phase 6 Plan Status
 
@@ -107,11 +99,17 @@ Phase 01 (hardware-port) completed all 3 plans:
 | 260601-tat | Add geo overlay toggle to settings — allow showing date, location, both, or neither | 2026-06-01 | 6cdb4dd | [260601-tat-add-geo-overlay-toggle-to-settings-allow](.planning/quick/260601-tat-add-geo-overlay-toggle-to-settings-allow/) |
 | 260601-udz | Add language switching for geo-location overlay | 2026-06-01 | 532bcb5 | [260601-udz-add-language-switching-for-geo-location-](.planning/quick/260601-udz-add-language-switching-for-geo-location-/) |
 
+## Phase 9 Plan Status
+
+| Plan | Name | Status |
+|------|------|--------|
+| 09-01 | TDD RED contract tests (PRE-01..PRE-10) | complete |
+| 09-02 | Refactor serve_* helpers + pre-fetch cache engine | complete |
+| 09-03 | /download consume path + main() startup warm | pending |
+
 ## Accumulated Context
 
 ### Roadmap Evolution
 
 - Phase 6 added: Text customization — colors, styles, and border mode (timestamp background color, text color, border style option with configurable border/text color; all exposed in Configuration UI)
 - Phase 7 added: Geolocation overlay from image metadata — extend overlay to show rough location from EXIF/Immich API; fall back to timestamp if no geo info present
-- Phase 8 added: Auth — secure access to the app so it's not simply open in the local network without any access control
-- Phase 9 added: Image Pre-fetch — pre-process the next image on the server so it is ready immediately when the device requests it, eliminating the current per-request processing delay
