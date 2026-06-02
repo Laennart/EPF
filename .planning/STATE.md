@@ -2,21 +2,21 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to execute
-last_updated: "2026-06-02T07:56:23.268Z"
+status: Milestone complete
+last_updated: "2026-06-01T20:00:00.000Z"
 progress:
-  total_phases: 9
+  total_phases: 7
   completed_phases: 7
-  total_plans: 21
-  completed_plans: 19
+  total_plans: 18
+  completed_plans: 18
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 08
-Plan: 03
+Phase: 07
+Plan: Not started
 
 ## Phase 1 Complete
 
@@ -71,18 +71,6 @@ Phase 01 (hardware-port) completed all 3 plans:
 - Nominatim module-level import, function-level instantiation — enables monkeypatching while avoiding module-level instantiation anti-pattern (07-02)
 - pre_transpose_image captured before exif_transpose so GPS EXIF safely readable from original image object (07-03)
 - serve_immich_image passes selected_image.get('exifInfo', {}) (empty dict, not None) for consistent type in parse_photo_location (07-03)
-- require_auth reads APP_PASSWORD at call time (not capture time) — allows monkeypatching in tests (08-02)
-- @require_auth stacked below @app.route so Flask registers original function name (avoids 404s on protected routes) (08-02)
-- hmac.compare_digest used instead of == for constant-time timing-safe password comparison (08-02 AUTH-07)
-- Username hardcoded as 'admin' per D-03 — no APP_USERNAME env var to keep auth surface minimal (08-02)
-
-## Phase 8 Plan Status
-
-| Plan | Name | Status |
-|------|------|--------|
-| 08-01 | TDD RED contract tests (AUTH-01..AUTH-08) | complete |
-| 08-02 | require_auth decorator + APP_PASSWORD + documentation | complete |
-| 08-03 | Arduino HTTPClient auth + firmware documentation | not started |
 
 ## Phase 6 Plan Status
 
@@ -100,6 +88,14 @@ Phase 01 (hardware-port) completed all 3 plans:
 | 07-02 | extract_gps_from_exif, reverse_geocode_cached, parse_photo_location | complete |
 | 07-03 | Wire immich_exif_raw into scale_img_in_memory + settings UI | complete |
 
+## Phase 9 Plan Status
+
+| Plan | Name | Status |
+|------|------|--------|
+| 09-01 | TDD RED contract tests (PRE-01..PRE-10) | complete |
+| 09-02 | pre-fetch state, worker, cache-hit integration | pending |
+| 09-03 | config invalidation, UI wiring | pending |
+
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
@@ -113,5 +109,10 @@ Phase 01 (hardware-port) completed all 3 plans:
 
 - Phase 6 added: Text customization — colors, styles, and border mode (timestamp background color, text color, border style option with configurable border/text color; all exposed in Configuration UI)
 - Phase 7 added: Geolocation overlay from image metadata — extend overlay to show rough location from EXIF/Immich API; fall back to timestamp if no geo info present
-- Phase 8 added: Auth — secure access to the app so it's not simply open in the local network without any access control
-- Phase 9 added: Image Pre-fetch — pre-process the next image on the server so it is ready immediately when the device requests it, eliminating the current per-request processing delay
+- Phase 9 added: Image pre-fetch — background threading for zero-wait /download; PRE-01..PRE-10 contract tests locked in 09-01
+
+## Key Decisions (09-01)
+
+- PRE-04 test_cache_miss_fallback passes vacuously in RED phase — /download has no cache check yet; test remains valid after 09-02 implementation (09-01)
+- monkeypatch raising=False used throughout so tests work before symbols exist on app module (09-01)
+- _valid_config() helper provides all required keys for update_app_config() (09-01)

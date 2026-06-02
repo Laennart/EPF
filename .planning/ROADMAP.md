@@ -92,32 +92,17 @@ Plans:
 - [x] 07-02-PLAN.md — TDD GREEN: add geopy==2.4.1; implement extract_gps_from_exif() + reverse_geocode_cached() (JSON cache) + parse_photo_location() (GEO-01..GEO-08)
 - [x] 07-03-PLAN.md — Integration: extend scale_img_in_memory() with immich_exif_raw + geo/date fallback assembly; wire serve_immich_image; static settings UI note (GEO-09..GEO-12)
 
-### Phase 8: Auth — Secure access to the app with opt-in HTTP Basic Auth
+### Phase 9: Image pre-fetch — background worker for zero-wait /download
 
-**Goal:** Add opt-in HTTP Basic Auth to the Flask app so it is not open to anyone on the local network. A `require_auth` decorator protects all four routes (`/`, `/setting`, `/download`, `/sleep`): when `APP_PASSWORD` is set, requests need username `admin` + the password (constant-time compared via `hmac.compare_digest`); missing/wrong credentials get `401` + `WWW-Authenticate: Basic realm="EPF"`, triggering the browser's native dialog. When `APP_PASSWORD` is empty/absent, all routes stay open (backward compatible). The ESP32 firmware sends matching credentials via `HTTPClient.setAuthorization("admin", APP_PASSWORD)` on its `/download` and `/sleep` calls. Documented in `compose.yml`, `.env.example`, and README.
-
-**Requirements:** AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-06, AUTH-07, AUTH-08, AUTH-09, AUTH-10
-
-**Depends on:** Phase 7
-
-**Plans:** 1/3 plans executed
-
-Plans:
-- [x] 08-01-PLAN.md — Wave 0 (TDD RED): tests/test_auth.py with 8 failing contract tests (AUTH-01..AUTH-08)
-- [x] 08-02-PLAN.md — TDD GREEN: require_auth decorator + APP_PASSWORD + protect 4 routes; document in compose.yml/.env.example/README (AUTH-01..05, 07, 08)
-- [ ] 08-03-PLAN.md — Firmware setAuthorization() on http + sleepHttp clients + config.h constant; human verify browser dialog + device fetch (AUTH-06, AUTH-09, AUTH-10)
-
-### Phase 9: Image Pre-fetch
-
-**Goal:** Pre-process the next image in a background daemon thread so a ready-to-serve `.c` file is waiting when the ESP32 calls `/download`, eliminating the per-request processing delay. The image-processing core is extracted from the Flask handlers into pure `_process_*_to_bytes()` helpers; a lock-guarded module-level cache (`_prefetch_cache`) holds the pre-rendered temp file. Pre-fetch triggers on startup and after every `/download` (D-01); the file lives in `/tmp` via `tempfile` (D-02); any `config.yaml` change invalidates and re-warms the cache (D-04). On a cold/empty cache, `/download` falls back silently to on-demand processing with no error (D-06); the background thread logs failures at WARN and never retries (D-07). All stdlib — no new dependencies.
+**Goal:** Eliminate /download latency by pre-processing the next image in a background thread immediately after each request is served. The /download route checks a thread-safe in-memory cache first; on cache hit it streams the pre-fetched .c file and immediately starts a new pre-fetch; on miss it falls back to the existing on-demand pipeline. A threading.Lock guards all cache reads/writes. Config changes invalidate the cache and trigger a fresh pre-fetch. No retry on background failure (log WARNING, leave cache empty).
 
 **Requirements:** PRE-01, PRE-02, PRE-03, PRE-04, PRE-05, PRE-06, PRE-07, PRE-08, PRE-09, PRE-10
 
-**Depends on:** Phase 8
+**Depends on:** Phase 7
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans complete
 
 Plans:
-- [ ] 09-01-PLAN.md — Wave 0 (TDD RED): tests/test_prefetch.py with 10 failing contract tests + reset_prefetch_state fixture (PRE-01..PRE-10)
-- [ ] 09-02-PLAN.md — Refactor serve_* into _process_*_to_bytes() helpers; add cache state, worker thread, config-hash, invalidation hook in update_app_config (PRE-05..PRE-10)
-- [ ] 09-03-PLAN.md — Wire /download cache-hit/consume path + on-demand fallback re-trigger + startup warm in main(); human verify live behavior (PRE-01..PRE-04)
+- [x] 09-01-PLAN.md — Wave 0 (TDD RED): tests/test_prefetch.py with 10 failing contract tests + reset_prefetch_state fixture (PRE-01..PRE-10)
+- [ ] 09-02-PLAN.md — TDD GREEN: module-level state, prefetch_next_image(), _trigger_prefetch(), _invalidate_prefetch_cache(), _process_* helpers
+- [ ] 09-03-PLAN.md — Wire /download cache-hit path, config invalidation hook, update_app_config integration
