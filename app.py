@@ -1,8 +1,10 @@
 # -*- coding:utf8 -*-
+import hashlib
 import io
 import json
 import os
 import random
+import tempfile
 import threading
 from datetime import datetime, timedelta
 
@@ -340,6 +342,11 @@ headers = {'Accept': 'application/json', 'x-api-key': apikey}
 
 # Allowed file extensions
 ALLOWED_EXTENSIONS = {'.jpeg', '.raw', '.jpg', '.bmp', '.dng', '.heic', '.arw', '.cr2', '.dng', '.nef', '.raw'}
+
+# --- Image pre-fetch cache (Phase 9) ---
+_prefetch_lock = threading.Lock()
+_prefetch_cache = {'path': None, 'asset_id': None, 'config_hash': None}
+_prefetch_thread = None
 
 # Set up the directory for the downloaded images
 os.makedirs(photodir, exist_ok=True)
@@ -759,6 +766,10 @@ def update_app_config(new_config):
         f'Configuration updated: URL = {url}, Album = {albumname}, angle = {rotationAngle}, enhance = {img_enhanced}, contrast = {img_contrast}, strength = {strength}, display_mode = {display_mode}, image_order = {image_order}'
     )
 
+    # Phase 9: any config change voids the pre-fetched image and re-warms (D-04)
+    _invalidate_prefetch_cache()
+    _trigger_prefetch()
+
 
 def start_config_watcher(config_path):
     """Start configuration file monitoring"""
@@ -770,6 +781,77 @@ def start_config_watcher(config_path):
     observer.start()
 
     return observer
+
+
+def _current_config_hash():
+    """Stable MD5 hex digest of current_config for cache invalidation."""
+    config_bytes = json.dumps(current_config, sort_keys=True, default=str).encode('utf-8')
+    return hashlib.md5(config_bytes).hexdigest()  # noqa: S324 — non-crypto use (cache key only)
+
+
+def _invalidate_prefetch_cache():
+    """Discard the pre-fetched cache and remove its temp file (PRE-10)."""
+    global _prefetch_cache
+    with _prefetch_lock:
+        old_path = _prefetch_cache['path']
+        _prefetch_cache = {'path': None, 'asset_id': None, 'config_hash': None}
+    if old_path:
+        try:
+            os.unlink(old_path)
+        except OSError:
+            pass
+
+
+def prefetch_next_image():
+    """Background worker: process the next image to a temp .c file (PRE-05/07).
+
+    On success: update _prefetch_cache under the lock.
+    On failure: log WARN, leave cache empty, no retry (D-07).
+    """
+    global _prefetch_cache
+    try:
+        local_has_images = os.path.isdir(localdir) and any(
+            os.path.splitext(f)[1].lower() in ALLOWED_EXTENSIONS for f in os.listdir(localdir)
+        )
+        if local_has_images:
+            c_code, asset_id = _process_local_image_to_bytes()
+        elif apikey:
+            c_code, asset_id = _process_immich_image_to_bytes()
+        else:
+            app.logger.warning('[prefetch] No image source configured, skipping.')
+            return
+
+        c_bytes = c_code.getvalue()
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.c', mode='wb') as tmp:
+            tmp_path = tmp.name
+            tmp.write(c_bytes)
+
+        with _prefetch_lock:
+            old_path = _prefetch_cache['path']
+            _prefetch_cache = {
+                'path': tmp_path,
+                'asset_id': asset_id,
+                'config_hash': _current_config_hash(),
+            }
+
+        if old_path:
+            try:
+                os.unlink(old_path)
+            except OSError:
+                pass
+
+        app.logger.info('[prefetch] Ready: %s (asset=%s)', tmp_path, asset_id)
+    except Exception as exc:  # noqa: BLE001 — background thread must never propagate
+        app.logger.warning('[prefetch] Failed to pre-fetch image: %s', exc)
+
+
+def _trigger_prefetch():
+    """Spawn the pre-fetch thread if one is not already running (PRE-09)."""
+    global _prefetch_thread
+    if _prefetch_thread is not None and _prefetch_thread.is_alive():
+        return
+    _prefetch_thread = threading.Thread(target=prefetch_next_image, daemon=True)
+    _prefetch_thread.start()
 
 
 # Add lithium battery voltage table (voltage: battery percentage)
