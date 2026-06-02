@@ -91,3 +91,18 @@ Plans:
 - [x] 07-01-PLAN.md — Wave 0 (TDD RED): tests/test_geo_overlay.py with 12 failing contract tests + synthetic_gps_image/mock_geo_cache_dir fixtures (GEO-01..GEO-12)
 - [x] 07-02-PLAN.md — TDD GREEN: add geopy==2.4.1; implement extract_gps_from_exif() + reverse_geocode_cached() (JSON cache) + parse_photo_location() (GEO-01..GEO-08)
 - [x] 07-03-PLAN.md — Integration: extend scale_img_in_memory() with immich_exif_raw + geo/date fallback assembly; wire serve_immich_image; static settings UI note (GEO-09..GEO-12)
+
+### Phase 9: Image pre-fetch — background worker for zero-wait /download
+
+**Goal:** Eliminate /download latency by pre-processing the next image in a background thread immediately after each request is served. The /download route checks a thread-safe in-memory cache first; on cache hit it streams the pre-fetched .c file and immediately starts a new pre-fetch; on miss it falls back to the existing on-demand pipeline. A threading.Lock guards all cache reads/writes. Config changes invalidate the cache and trigger a fresh pre-fetch. No retry on background failure (log WARNING, leave cache empty).
+
+**Requirements:** PRE-01, PRE-02, PRE-03, PRE-04, PRE-05, PRE-06, PRE-07, PRE-08, PRE-09, PRE-10
+
+**Depends on:** Phase 7
+
+**Plans:** 1/3 plans complete
+
+Plans:
+- [x] 09-01-PLAN.md — Wave 0 (TDD RED): tests/test_prefetch.py with 10 failing contract tests + reset_prefetch_state fixture (PRE-01..PRE-10)
+- [ ] 09-02-PLAN.md — TDD GREEN: module-level state, prefetch_next_image(), _trigger_prefetch(), _invalidate_prefetch_cache(), _process_* helpers
+- [ ] 09-03-PLAN.md — Wire /download cache-hit path, config invalidation hook, update_app_config integration

@@ -88,6 +88,14 @@ Phase 01 (hardware-port) completed all 3 plans:
 | 07-02 | extract_gps_from_exif, reverse_geocode_cached, parse_photo_location | complete |
 | 07-03 | Wire immich_exif_raw into scale_img_in_memory + settings UI | complete |
 
+## Phase 9 Plan Status
+
+| Plan | Name | Status |
+|------|------|--------|
+| 09-01 | TDD RED contract tests (PRE-01..PRE-10) | complete |
+| 09-02 | pre-fetch state, worker, cache-hit integration | pending |
+| 09-03 | config invalidation, UI wiring | pending |
+
 ### Quick Tasks Completed
 
 | # | Description | Date | Commit | Directory |
@@ -101,3 +109,10 @@ Phase 01 (hardware-port) completed all 3 plans:
 
 - Phase 6 added: Text customization — colors, styles, and border mode (timestamp background color, text color, border style option with configurable border/text color; all exposed in Configuration UI)
 - Phase 7 added: Geolocation overlay from image metadata — extend overlay to show rough location from EXIF/Immich API; fall back to timestamp if no geo info present
+- Phase 9 added: Image pre-fetch — background threading for zero-wait /download; PRE-01..PRE-10 contract tests locked in 09-01
+
+## Key Decisions (09-01)
+
+- PRE-04 test_cache_miss_fallback passes vacuously in RED phase — /download has no cache check yet; test remains valid after 09-02 implementation (09-01)
+- monkeypatch raising=False used throughout so tests work before symbols exist on app module (09-01)
+- _valid_config() helper provides all required keys for update_app_config() (09-01)
