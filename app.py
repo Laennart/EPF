@@ -843,7 +843,7 @@ def prefetch_next_image():
         elif apikey:
             c_code, asset_id = _process_immich_image_to_bytes()
         else:
-            app.logger.warning('[prefetch] No image source configured, skipping.')
+            print('[prefetch] No image source configured, skipping.')
             return
 
         c_bytes = c_code.getvalue()
@@ -865,9 +865,9 @@ def prefetch_next_image():
             except OSError:
                 pass
 
-        app.logger.info('[prefetch] Ready: %s (asset=%s)', tmp_path, asset_id)
+        print(f'[prefetch] Ready: {tmp_path} (asset={asset_id})')
     except Exception as exc:  # noqa: BLE001 — background thread must never propagate
-        app.logger.warning('[prefetch] Failed to pre-fetch image: %s', exc)
+        print(f'[prefetch] Failed to pre-fetch image: {exc}')
 
 
 def _trigger_prefetch():
@@ -1278,7 +1278,7 @@ def process_and_download():
                 download_name='image.c',
             )
         except OSError as exc:
-            app.logger.warning('[prefetch] Cache read failed, falling back: %s', exc)
+            print(f'[prefetch] Cache read failed, falling back: {exc}')
 
     try:
         # Local folder takes priority when it contains at least one image.
