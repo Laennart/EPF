@@ -15,8 +15,8 @@ progress:
 
 ## Current Position
 
-Phase: 08
-Plan: Not started
+Phase: 09-image-prefetch
+Plan: 03 (next to execute)
 
 ## Phase 1 Complete
 
@@ -75,6 +75,13 @@ Phase 01 (hardware-port) completed all 3 plans:
 - @require_auth stacked below @app.route so Flask registers original function name (avoids 404s on protected routes) (08-02)
 - hmac.compare_digest used instead of == for constant-time timing-safe password comparison (08-02 AUTH-07)
 - Username hardcoded as 'admin' per D-03 — no APP_USERNAME env var to keep auth surface minimal (08-02)
+- _process_immich_image_to_bytes raises RuntimeError instead of jsonify — enables background thread to catch cleanly without Flask context (09-02)
+- _invalidate_prefetch_cache replaces entire _prefetch_cache dict under lock — immutable update pattern (09-02)
+- prefetch_next_image uses BLE001 noqa broad except — background daemon thread must never propagate exceptions (09-02)
+- update_app_config hook (_invalidate_prefetch_cache + _trigger_prefetch) at end of body — Python name resolution is at call time, not definition time (09-02)
+- One-shot consume: _prefetch_cache['path'] set to None under lock before reading file — prevents concurrent double-serve without holding lock during I/O (09-03)
+- Read file into BytesIO before os.unlink — avoids send_file streaming while file is unlinked; safe on all platforms (09-03)
+- test_download_triggers_prefetch: moved os.path.isdir/os.listdir monkeypatching inside test_client() context — Python 3.9 importlib.metadata uses isdir for package discovery; pre-patch broke werkzeug metadata lookup (09-03)
 
 ## Phase 8 Plan Status
 
@@ -106,6 +113,14 @@ Phase 01 (hardware-port) completed all 3 plans:
 |---|-------------|------|--------|-----------|
 | 260601-tat | Add geo overlay toggle to settings — allow showing date, location, both, or neither | 2026-06-01 | 6cdb4dd | [260601-tat-add-geo-overlay-toggle-to-settings-allow](.planning/quick/260601-tat-add-geo-overlay-toggle-to-settings-allow/) |
 | 260601-udz | Add language switching for geo-location overlay | 2026-06-01 | 532bcb5 | [260601-udz-add-language-switching-for-geo-location-](.planning/quick/260601-udz-add-language-switching-for-geo-location-/) |
+
+## Phase 9 Plan Status
+
+| Plan | Name | Status |
+|------|------|--------|
+| 09-01 | TDD RED contract tests (PRE-01..PRE-10) | complete |
+| 09-02 | Refactor serve_* helpers + pre-fetch cache engine | complete |
+| 09-03 | /download consume path + main() startup warm | tasks 1-2 complete; awaiting human-verify |
 
 ## Accumulated Context
 

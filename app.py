@@ -1,9 +1,11 @@
 # -*- coding:utf8 -*-
+import hashlib
 import hmac
 import io
 import json
 import os
 import random
+import tempfile
 import threading
 from datetime import datetime, timedelta
 from functools import wraps
@@ -343,6 +345,11 @@ headers = {'Accept': 'application/json', 'x-api-key': apikey}
 
 # Allowed file extensions
 ALLOWED_EXTENSIONS = {'.jpeg', '.raw', '.jpg', '.bmp', '.dng', '.heic', '.arw', '.cr2', '.dng', '.nef', '.raw'}
+
+# --- Image pre-fetch cache (Phase 9) ---
+_prefetch_lock = threading.Lock()
+_prefetch_cache = {'path': None, 'asset_id': None, 'config_hash': None}
+_prefetch_thread = None
 
 # Set up the directory for the downloaded images
 os.makedirs(photodir, exist_ok=True)
@@ -784,6 +791,10 @@ def update_app_config(new_config):
         f'Configuration updated: URL = {url}, Album = {albumname}, angle = {rotationAngle}, enhance = {img_enhanced}, contrast = {img_contrast}, strength = {strength}, display_mode = {display_mode}, image_order = {image_order}'
     )
 
+    # Phase 9: any config change voids the pre-fetched image and re-warms (D-04)
+    _invalidate_prefetch_cache()
+    _trigger_prefetch()
+
 
 def start_config_watcher(config_path):
     """Start configuration file monitoring"""
@@ -795,6 +806,77 @@ def start_config_watcher(config_path):
     observer.start()
 
     return observer
+
+
+def _current_config_hash():
+    """Stable MD5 hex digest of current_config for cache invalidation."""
+    config_bytes = json.dumps(current_config, sort_keys=True, default=str).encode('utf-8')
+    return hashlib.md5(config_bytes).hexdigest()  # noqa: S324 — non-crypto use (cache key only)
+
+
+def _invalidate_prefetch_cache():
+    """Discard the pre-fetched cache and remove its temp file (PRE-10)."""
+    global _prefetch_cache
+    with _prefetch_lock:
+        old_path = _prefetch_cache['path']
+        _prefetch_cache = {'path': None, 'asset_id': None, 'config_hash': None}
+    if old_path:
+        try:
+            os.unlink(old_path)
+        except OSError:
+            pass
+
+
+def prefetch_next_image():
+    """Background worker: process the next image to a temp .c file (PRE-05/07).
+
+    On success: update _prefetch_cache under the lock.
+    On failure: log WARN, leave cache empty, no retry (D-07).
+    """
+    global _prefetch_cache
+    try:
+        local_has_images = os.path.isdir(localdir) and any(
+            os.path.splitext(f)[1].lower() in ALLOWED_EXTENSIONS for f in os.listdir(localdir)
+        )
+        if local_has_images:
+            c_code, asset_id = _process_local_image_to_bytes()
+        elif apikey:
+            c_code, asset_id = _process_immich_image_to_bytes()
+        else:
+            print('[prefetch] No image source configured, skipping.')
+            return
+
+        c_bytes = c_code.getvalue()
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.c', mode='wb') as tmp:
+            tmp_path = tmp.name
+            tmp.write(c_bytes)
+
+        with _prefetch_lock:
+            old_path = _prefetch_cache['path']
+            _prefetch_cache = {
+                'path': tmp_path,
+                'asset_id': asset_id,
+                'config_hash': _current_config_hash(),
+            }
+
+        if old_path:
+            try:
+                os.unlink(old_path)
+            except OSError:
+                pass
+
+        print(f'[prefetch] Ready: {tmp_path} (asset={asset_id})')
+    except Exception as exc:  # noqa: BLE001 — background thread must never propagate
+        print(f'[prefetch] Failed to pre-fetch image: {exc}')
+
+
+def _trigger_prefetch():
+    """Spawn the pre-fetch thread if one is not already running (PRE-09)."""
+    global _prefetch_thread
+    if _prefetch_thread is not None and _prefetch_thread.is_alive():
+        return
+    _prefetch_thread = threading.Thread(target=prefetch_next_image, daemon=True)
+    _prefetch_thread.start()
 
 
 # Add lithium battery voltage table (voltage: battery percentage)
@@ -994,6 +1076,9 @@ def main():
         ntp_sync_thread = threading.Thread(target=run_daily_ntp_sync, daemon=True)
         ntp_sync_thread.start()
 
+        # Phase 9: warm the pre-fetch cache before the first device request (PRE-01, D-01)
+        _trigger_prefetch()
+
         # Run Flask application in a separate thread
         app.run(host='0.0.0.0', port=5000, use_reloader=False)
     except KeyboardInterrupt:
@@ -1014,14 +1099,18 @@ def open_image_from_path(filepath):
         return Image.open(filepath)
 
 
-def serve_local_image():
-    """Pick a random image from localdir, process it, and return a send_file response."""
+def _process_local_image_to_bytes():
+    """Select and process a random local image; return (BytesIO c_code, stem).
+
+    Raises RuntimeError instead of returning a Flask Response so the background
+    pre-fetch thread can catch exceptions cleanly.
+    """
     if not os.path.isdir(localdir):
-        return jsonify({'error': f'Local photo directory not found: {localdir}'}), 500
+        raise RuntimeError(f'Local photo directory not found: {localdir}')
 
     candidates = [f for f in os.listdir(localdir) if os.path.splitext(f)[1].lower() in ALLOWED_EXTENSIONS]
     if not candidates:
-        return jsonify({'error': 'No supported images found in local directory'}), 404
+        raise RuntimeError('No supported images found in local directory')
 
     filename = random.choice(candidates)
     filepath = os.path.join(localdir, filename)
@@ -1032,38 +1121,55 @@ def serve_local_image():
     c_code = convert_to_c_code_in_memory(Image.open(processed_image))
 
     stem = os.path.splitext(filename)[0]
+    return (c_code, stem)
+
+
+def serve_local_image():
+    """Thin wrapper: pick a random local image and return a send_file response."""
+    try:
+        c_code, stem = _process_local_image_to_bytes()
+    except RuntimeError as e:
+        msg = str(e)
+        code = 404 if 'No supported images' in msg else 500
+        return jsonify({'error': msg}), code
     return send_file(c_code, mimetype='text/plain', as_attachment=True, download_name=f'image_{stem}.c')
 
 
-def serve_immich_image():
-    """Pick an image from Immich, process it, and return a send_file response."""
+def _process_immich_image_to_bytes():
+    """Select and process an Immich image; return (BytesIO c_code, asset_id).
+
+    Raises RuntimeError instead of returning a Flask Response so the background
+    pre-fetch thread can catch exceptions cleanly.
+
+    Error message to HTTP status mapping for serve_immich_image():
+    - 'Album not found' / 'No images found' → 404
+    - all other errors → 500
+    """
     current_url = url
     current_albumname = albumname
 
     if not current_url or not current_albumname:
-        return jsonify({'error': 'Immich URL or Album not configured'}), 500
+        raise RuntimeError('Immich URL or Album not configured')
 
     downloaded_images = load_downloaded_images()
 
     response = requests.get(f'{current_url}/api/albums', headers=headers, params={'withoutAssets': 'true'})
     if response.status_code != 200:
         print(f'[ERROR] GET /api/albums → HTTP {response.status_code}: {response.text[:500]}')
-        return jsonify(
-            {'error': 'Failed to fetch albums', 'status': response.status_code, 'detail': response.text[:500]}
-        ), 500
+        raise RuntimeError(f'Failed to fetch albums (HTTP {response.status_code})')
 
     data = response.json()
     albumid = next((item['id'] for item in data if item['albumName'] == current_albumname), None)
     if not albumid:
-        return jsonify({'error': 'Album not found'}), 404
+        raise RuntimeError('Album not found')
 
     response = requests.get(f'{url}/api/albums/{albumid}', headers=headers)
     if response.status_code != 200:
-        return jsonify({'error': 'Failed to fetch album details'}), 500
+        raise RuntimeError('Failed to fetch album details')
 
     data = response.json()
     if 'assets' not in data or not data['assets']:
-        return jsonify({'error': 'No images found in album'}), 404
+        raise RuntimeError('No images found in album')
 
     current_image_order = current_config['immich']['image_order']
 
@@ -1100,7 +1206,7 @@ def serve_immich_image():
     print(f'{url}/api/assets/{asset_id}/original')
     response = requests.get(f'{url}/api/assets/{asset_id}/original', headers=headers, stream=True)
     if response.status_code != 200:
-        return jsonify({'error': 'Failed to download image'}), 500
+        raise RuntimeError('Failed to download image')
 
     image_data = io.BytesIO(response.content)
     if selected_image['originalPath'].lower().endswith(('.raw', '.dng', '.arw', '.cr2', '.nef')):
@@ -1121,6 +1227,18 @@ def serve_immich_image():
     processed_image.seek(0)
     c_code = convert_to_c_code_in_memory(Image.open(processed_image))
 
+    return (c_code, asset_id)
+
+
+def serve_immich_image():
+    """Thin wrapper: pick an Immich image and return a send_file response."""
+    try:
+        c_code, asset_id = _process_immich_image_to_bytes()
+    except RuntimeError as e:
+        msg = str(e)
+        # Map specific messages to 404; everything else is 500
+        code = 404 if ('not found' in msg.lower() or 'No images found' in msg) else 500
+        return jsonify({'error': msg}), code
     return send_file(c_code, mimetype='text/plain', as_attachment=True, download_name=f'image_{asset_id}.c')
 
 
@@ -1138,6 +1256,30 @@ def process_and_download():
     except (TypeError, ValueError):
         pass
 
+    # Phase 9: serve pre-fetched image if ready (PRE-03), else fall back (PRE-04)
+    with _prefetch_lock:
+        cached_path = _prefetch_cache['path']
+        if cached_path:
+            _prefetch_cache['path'] = None  # one-shot consume
+
+    if cached_path and os.path.exists(cached_path):
+        try:
+            with open(cached_path, 'rb') as fh:
+                c_bytes = fh.read()
+            try:
+                os.unlink(cached_path)
+            except OSError:
+                pass
+            _trigger_prefetch()  # warm next image (PRE-02)
+            return send_file(
+                io.BytesIO(c_bytes),
+                mimetype='text/plain',
+                as_attachment=True,
+                download_name='image.c',
+            )
+        except OSError as exc:
+            print(f'[prefetch] Cache read failed, falling back: {exc}')
+
     try:
         # Local folder takes priority when it contains at least one image.
         # Fall back to Immich when IMMICH_API_KEY is present.
@@ -1145,13 +1287,15 @@ def process_and_download():
             os.path.splitext(f)[1].lower() in ALLOWED_EXTENSIONS for f in os.listdir(localdir)
         )
         if local_has_images:
-            return serve_local_image()
+            response = serve_local_image()
         elif apikey:
-            return serve_immich_image()
+            response = serve_immich_image()
         else:
             return jsonify(
                 {'error': 'No image source configured. Add images to local_photos/ or set IMMICH_API_KEY.'}
             ), 500
+        _trigger_prefetch()  # warm next image after on-demand serve (PRE-02)
+        return response
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
