@@ -2,21 +2,21 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Milestone complete
-last_updated: "2026-06-02T21:04:10.530Z"
+status: In Progress
+last_updated: "2026-06-07T13:14:36Z"
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 8
-  total_plans: 21
-  completed_plans: 21
+  total_plans: 24
+  completed_plans: 22
 ---
 
 # Project State
 
 ## Current Position
 
-Phase: 08
-Plan: Not started
+Phase: 09
+Plan: 03 (next)
 
 ## Phase 1 Complete
 
@@ -75,6 +75,18 @@ Phase 01 (hardware-port) completed all 3 plans:
 - @require_auth stacked below @app.route so Flask registers original function name (avoids 404s on protected routes) (08-02)
 - hmac.compare_digest used instead of == for constant-time timing-safe password comparison (08-02 AUTH-07)
 - Username hardcoded as 'admin' per D-03 — no APP_USERNAME env var to keep auth surface minimal (08-02)
+- blur_radius module-level global initialized from DEFAULT_CONFIG; scale_img_in_memory reads globals directly so module-level init is required for test isolation (09-02)
+- BG-06 test fixed to use gradient image — GaussianBlur of uniform solid color produces identical output regardless of radius; only non-uniform images reveal blur radius differences (09-02)
+- fill branch in load_scaled() completely unchanged; blur logic added only to fit (else) branch (09-02)
+- max(bg_width, EPD_W) + max(bg_height, EPD_H) guards in background resize prevent edge artifacts from undersize background (09-02)
+
+## Phase 9 Plan Status
+
+| Plan | Name | Status |
+|------|------|--------|
+| 09-01 | TDD RED contract tests (BG-01..BG-06) | complete |
+| 09-02 | Blur-fill background implementation + blur_radius config wiring | complete |
+| 09-03 | cpy.pyx mirror + settings UI slider | not started |
 
 ## Phase 8 Plan Status
 
