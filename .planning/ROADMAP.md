@@ -115,9 +115,9 @@ Plans:
 
 **Depends on:** Phase 8
 
-**Plans:** 3 plans
+**Plans:** 0/3 plans executed
 
 Plans:
-- [ ] 09-01-PLAN.md — Wave 1 (TDD RED): tests/test_blur_background.py with 6 failing contract tests (BG-01..BG-06)
+- [x] 09-01-PLAN.md — Wave 1 (TDD RED): tests/test_blur_background.py with 6 failing contract tests (BG-01..BG-06)
 - [ ] 09-02-PLAN.md — Wave 2 (TDD GREEN): blur-fill fit branch in cpy_fallback.py + blur_radius wired through app.py (DEFAULT_CONFIG, update_app_config, scale_img_in_memory, POST handler)
 - [ ] 09-03-PLAN.md — Wave 3: mirror blur logic into cpy.pyx + blur_radius slider in settings.html + human visual verify checkpoint

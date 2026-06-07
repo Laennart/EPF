@@ -15,8 +15,8 @@ progress:
 
 ## Current Position
 
-Phase: 09
-Plan: 03 (next)
+Phase: 09 (blurred-background-behind-image-when-using-fit-width-or-fit-height-modes) — EXECUTING
+Plan: 3 of 3
 
 ## Phase 1 Complete
 
@@ -126,3 +126,4 @@ Phase 01 (hardware-port) completed all 3 plans:
 - Phase 6 added: Text customization — colors, styles, and border mode (timestamp background color, text color, border style option with configurable border/text color; all exposed in Configuration UI)
 - Phase 7 added: Geolocation overlay from image metadata — extend overlay to show rough location from EXIF/Immich API; fall back to timestamp if no geo info present
 - Phase 8 added: Auth — secure access to the app so it's not simply open in the local network without any access control
+- Phase 9 added: Blurred background behind image when using fit-width or fit-height modes
