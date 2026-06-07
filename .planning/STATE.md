@@ -75,6 +75,20 @@ Phase 01 (hardware-port) completed all 3 plans:
 - @require_auth stacked below @app.route so Flask registers original function name (avoids 404s on protected routes) (08-02)
 - hmac.compare_digest used instead of == for constant-time timing-safe password comparison (08-02 AUTH-07)
 - Username hardcoded as 'admin' per D-03 — no APP_USERNAME env var to keep auth surface minimal (08-02)
+- blur_radius module-level global initialized from DEFAULT_CONFIG; scale_img_in_memory reads globals directly so module-level init is required for test isolation (09-02)
+- BG-06 test fixed to use gradient image — GaussianBlur of uniform solid color produces identical output regardless of radius; only non-uniform images reveal blur radius differences (09-02)
+- fill branch in load_scaled() completely unchanged; blur logic added only to fit (else) branch (09-02)
+- max(bg_width, EPD_W) + max(bg_height, EPD_H) guards in background resize prevent edge artifacts from undersize background (09-02)
+- cpy.pyx retains Image.LANCZOS (not Image.Resampling.LANCZOS) — required to avoid Cython compile errors; mirrors cpy_fallback.py logic otherwise identically (09-03)
+- blur_radius slider in settings.html uses step=5, range 5-80, default 30; reset function uses nextElementSibling.textContent pattern matching existing sliders (09-03)
+
+## Phase 9 Plan Status
+
+| Plan | Name | Status |
+|------|------|--------|
+| 09-01 | TDD RED contract tests (BG-01..BG-06) | complete |
+| 09-02 | Blur-fill background implementation + blur_radius config wiring | complete |
+| 09-03 | cpy.pyx mirror + settings UI slider | complete (awaiting human verify) |
 
 ## Phase 8 Plan Status
 
