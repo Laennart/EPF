@@ -919,9 +919,7 @@ def settings():
                 'overlay_language': request.form.get(
                     'overlay_language', current_config['immich'].get('overlay_language', 'en')
                 ),
-                'blur_radius': int(
-                    request.form.get('blur_radius', current_config['immich'].get('blur_radius', 30))
-                ),
+                'blur_radius': int(request.form.get('blur_radius', current_config['immich'].get('blur_radius', 30))),
             }
         }
 
