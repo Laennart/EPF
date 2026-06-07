@@ -106,13 +106,26 @@ def test_fit_height_subcase():
 
 # --- BG-06: blur_radius kwarg accepted and produces visually different results ---
 
+def make_gradient_image(width, height):
+    """Return a gradient RGB PIL Image — needed for blur radius comparison (uniform images
+    produce identical blur output regardless of radius; a gradient has texture to reveal)."""
+    img = Image.new("RGB", (width, height))
+    img.putdata([
+        (x % 256, y % 256, (x + y) % 256)
+        for y in range(height)
+        for x in range(width)
+    ])
+    return img
+
+
 def test_blur_radius_config():
     """BG-06: load_scaled accepts blur_radius kwarg; different radii produce different results."""
-    img = make_colored_image(1000, 600, color=(200, 100, 50))
-    # This will raise TypeError until blur_radius kwarg is added to load_scaled()
+    # Use a gradient image — a uniform solid color produces identical blur output for any radius.
+    # A gradient has texture that is smoothed differently at radius=5 vs radius=60.
+    img = make_gradient_image(1000, 600)
     result_low = load_scaled(img, 0, display_mode='fit', blur_radius=5)
     result_high = load_scaled(img, 0, display_mode='fit', blur_radius=60)
-    # The left bar at column 0, row 300 should differ between radii
+    # The top letterbox bar (row 0-439) should differ between radii due to different blur spread
     pixel_low = result_low.getpixel((0, 300))
     pixel_high = result_high.getpixel((0, 300))
     # With different blur radii the blurred background will differ (lower radius = more texture)
