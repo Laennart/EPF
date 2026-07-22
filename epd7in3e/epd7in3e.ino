@@ -434,8 +434,9 @@ public:
     if (shouldEnterConfigMode())
     {
       Serial.println(F("Config button pressed, entering config mode..."));
-      epaper.fillScreen(TFT_WHITE); epaper.update();
-      // epaper.sleep();
+      // The panel is intentionally left untouched: e-paper is bistable, so the
+      // last photo stays visible while the captive portal runs. Blanking it
+      // would also cost a full ~20-30 s refresh before the portal came up.
 
       bool res = WifiCaptivePortal.startPortal();
       if (res)
@@ -507,15 +508,11 @@ public:
     hibernate();
   }
 
-  // Clear the e-paper display
-  void clearScreen()
-  {
-    epaper.begin();
-    delay(100);
-    epaper.fillScreen(TFT_WHITE);
-    epaper.update();
-    epaper.sleep();
-  }
+  // NOTE: there is deliberately no clearScreen()/blank-the-panel helper. The
+  // display must never be cleared — e-paper is bistable, so whatever was last
+  // rendered stays visible at zero power, and a full white refresh costs
+  // ~20-30 s at high current. Every former call site (low-battery guard,
+  // failed startup, config mode) now leaves the last photo in place.
 
   // Startup failed — no WiFi configuration, or the connection attempt failed.
   //
