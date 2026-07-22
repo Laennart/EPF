@@ -121,3 +121,78 @@ Plans:
 - [x] 09-01-PLAN.md — Wave 1 (TDD RED): tests/test_blur_background.py with 6 failing contract tests (BG-01..BG-06)
 - [x] 09-02-PLAN.md — Wave 2 (TDD GREEN): blur-fill fit branch in cpy_fallback.py + blur_radius wired through app.py (DEFAULT_CONFIG, update_app_config, scale_img_in_memory, POST handler)
 - [x] 09-03-PLAN.md — Wave 3: mirror blur logic into cpy.pyx + blur_radius slider in settings.html + human visual verify checkpoint
+
+### Phase 10: Battery optimization
+
+**Goal:** Reduce active-period battery drain on the XIAO ESP32-S3 firmware. Switch image transport from hex-CSV text (~2.8 MB) to raw binary (960000 bytes, application/octet-stream) on the server to cut WiFi-on time ~3x. On firmware: gate the 3 s USB-CDC boot delay on wakeup cause (skip on deep-sleep wakeups), set CPU to 80 MHz and WiFi TX power to 8.5 dBm before connecting, decode the frame as raw binary directly into PSRAM, and isolate the BAT_ADC/ADC_EN GPIOs before deep sleep. Estimated ~4.4 mAh/day saved.
+
+**Requirements:** BATT-01, BATT-02, BATT-03, BATT-04, BATT-05, BATT-06
+
+**Depends on:** Phase 9
+
+**Plans:** 2/2 plans complete
+
+Plans:
+- [x] 10-01-PLAN.md — Wave 1 (TDD): binary image transport server-side — convert_to_binary_in_memory() + octet-stream /download responses; contract tests BATT-01..04
+- [x] 10-02-PLAN.md — Wave 2 (firmware): gated boot delay + CPU 80 MHz + WiFi TX 11 dBm + binary frame decode + GPIO isolation; human-verify on device (BATT-05, BATT-06)
+
+### Phase 999.1: Set SPI/display GPIO pins to INPUT before deep sleep
+
+**Goal:** Set SPI and display control pins (DC GPIO10, CS GPIO44, CS1 GPIO41, RST GPIO38) to INPUT mode — and release SCLK GPIO8 / MOSI GPIO9 via `SPI.end()` — before `esp_deep_sleep_start()` in the battery path of `hibernate()`, to eliminate leakage current through the e-paper protection diodes. These are digital-only ESP32-S3 pins (NOT RTC-capable), so `rtc_gpio_isolate()` does not apply and `gpio_reset_pin()` is avoided (can block deep-sleep entry); use `pinMode(pin, INPUT)`. The Seeed_GFX `epaper.sleep()` call only sends a software command and does NOT tri-state these lines. Measure deep-sleep current before/after — impact may be small or zero if the T133A01 already tri-states its own SPI inputs on sleep, in which case the change remains as defensive engineering.
+
+**Requirements:** SLEEP-01, SLEEP-02, SLEEP-03
+
+**Depends on:** Phase 10
+
+**Plans:** 1/1 plans complete
+
+Plans:
+- [x] 999.1-01-PLAN.md — Measure baseline current, add SPI.end() + pinMode(INPUT) on DC/CS/CS1/RST to hibernate() battery path, human-verify wake cycle + measure after-change current (SLEEP-01..03)
+
+### Phase 11: Margin for text on image — configurable inset margin to keep text visible behind passe-partout
+
+**Goal:** Add a configurable inset margin so the date/location overlay text is pushed away from the display edges, keeping it visible inside a passe-partout window mat. Two separate config keys — `overlay_margin_h` (horizontal) and `overlay_margin_v` (vertical) — default to 0 px (no visual change for existing deployments) and are exposed as 0–200 px sliders in the settings UI. The margin is additive to the existing `padding=6` text-box breathing room and is applied by the 9 POSITIONS lambdas and `draw_date_overlay()`.
+
+**Requirements:** MARGIN-01, MARGIN-02, MARGIN-03, MARGIN-04, MARGIN-05
+
+**Depends on:** Phase 999.1
+
+**Plans:** 2/2 plans complete
+
+Plans:
+- [x] 11-01-PLAN.md — Wave 1 (TDD): extend POSITIONS lambdas + draw_date_overlay() with margin_h/margin_v; tests/test_overlay_margin.py (MARGIN-01, MARGIN-02)
+- [ ] 11-02-PLAN.md — Wave 2: wire overlay_margin_h/overlay_margin_v through DEFAULT_CONFIG/globals/update_app_config/POST/call site + two settings.html sliders (MARGIN-03, MARGIN-04, MARGIN-05)
+
+### Phase 12: More color options — expand text and border color palette with gray shades
+
+**Goal:** Add three gray shade options (Dark Gray, Gray, Light Gray) to the overlay color system so the date/location overlay's background, text, and border colors can use grays in addition to the existing 6-color T133A01 palette. Grays are overlay-only RGB values (64/128/192) drawn before quantization and nearest-neighbor to black/white on the e-paper; the hardware quantization palette is unchanged.
+**Requirements:** CLR-01, CLR-02, CLR-03, CLR-04
+**Depends on:** Phase 11
+**Plans:** 1/1 plans complete
+
+Plans:
+- [ ] 12-01-PLAN.md — Add dark_gray/gray/light_gray to OVERLAY_COLORS + contract test; add gray options to all three color dropdowns; human-verify render & persist
+
+### Phase 13: Battery indicator icon — low battery warning and flat battery icons on display
+
+**Goal:** Render a PIL-drawn battery warning icon onto the display image (server-side, before binary encoding) only when the device's reported battery level is low (≤20%, partial-fill icon) or flat (≤5%, empty outline). Warning-only — no icon for a healthy battery, a disabled indicator, or a USB/no-data device. A new `draw_battery_indicator()` mirrors the rotation-aware viewer-space technique of `draw_date_overlay()` and reuses the POSITIONS system. The icon is configurable via a new "Battery Indicator" settings card (enable on/off + 9-position dropdown, defaults On / Top Right). Server-only; no firmware changes.
+**Requirements:** BATIND-01, BATIND-02, BATIND-03, BATIND-04, BATIND-05
+**Depends on:** Phase 12
+**Plans:** 1/2 plans executed
+
+Plans:
+- [x] 13-01-PLAN.md — Wave 1 (TDD): draw_battery_indicator() + BATTERY_LOW/FLAT_THRESHOLD constants + tests/test_battery_indicator.py (BATIND-01..03)
+- [ ] 13-02-PLAN.md — Wave 2: wire battery_indicator_enabled/position through config + scale_img_in_memory call site + settings.html card + human-verify (BATIND-04, BATIND-05)
+
+## Backlog
+
+### Phase 999.2: Dithered grey overlays — simulate grey on e-paper via pre-dithering (BACKLOG)
+
+**Goal:** Simulate true grey shades on the e-paper display by pre-dithering overlay pixels with a Bayer/checkerboard black+white pattern before compositing onto the photo. Currently Grey 300–600 nearest-neighbour to green on the T133A01 6-color palette due to Euclidean RGB distance; dithering would make them perceptually grey.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Context: Draw overlay on a separate RGBA layer, replace grey regions with a Bayer dither pattern at the appropriate density (e.g. grey_500 = 50% black in a 2×2 tile), then composite before quantization. Small text at low font sizes may look noisy — needs design consideration.
+
+Plans:
+- [ ] TBD (promote with /gsd:review-backlog when ready)

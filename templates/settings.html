@@ -527,38 +527,69 @@
                 <div class="form-group">
                     <label for="overlay_bg_color">Background Color:</label>
                     <select id="overlay_bg_color" name="overlay_bg_color">
-                        <option value="black"  {% if config['immich'].get('overlay_bg_color', 'black') == 'black'  %}selected{% endif %}>Black</option>
-                        <option value="white"  {% if config['immich'].get('overlay_bg_color', 'black') == 'white'  %}selected{% endif %}>White</option>
-                        <option value="yellow" {% if config['immich'].get('overlay_bg_color', 'black') == 'yellow' %}selected{% endif %}>Yellow</option>
-                        <option value="red"    {% if config['immich'].get('overlay_bg_color', 'black') == 'red'    %}selected{% endif %}>Red</option>
-                        <option value="blue"   {% if config['immich'].get('overlay_bg_color', 'black') == 'blue'   %}selected{% endif %}>Blue</option>
-                        <option value="green"  {% if config['immich'].get('overlay_bg_color', 'black') == 'green'  %}selected{% endif %}>Green</option>
+                        <option value="black"      {% if config['immich'].get('overlay_bg_color', 'black') == 'black'      %}selected{% endif %}>Black</option>
+                        <option value="white"      {% if config['immich'].get('overlay_bg_color', 'black') == 'white'      %}selected{% endif %}>White</option>
+                        <option value="grey_100" {% if config['immich'].get('overlay_bg_color', 'black') == 'grey_100' %}selected{% endif %}>Grey 100</option>
+                        <option value="grey_200" {% if config['immich'].get('overlay_bg_color', 'black') == 'grey_200' %}selected{% endif %}>Grey 200</option>
+                        <option value="grey_300" {% if config['immich'].get('overlay_bg_color', 'black') == 'grey_300' %}selected{% endif %}>Grey 300</option>
+                        <option value="grey_400" {% if config['immich'].get('overlay_bg_color', 'black') == 'grey_400' %}selected{% endif %}>Grey 400</option>
+                        <option value="grey_500" {% if config['immich'].get('overlay_bg_color', 'black') == 'grey_500' %}selected{% endif %}>Grey 500</option>
+                        <option value="grey_600" {% if config['immich'].get('overlay_bg_color', 'black') == 'grey_600' %}selected{% endif %}>Grey 600</option>
+                        <option value="grey_700" {% if config['immich'].get('overlay_bg_color', 'black') == 'grey_700' %}selected{% endif %}>Grey 700</option>
+                        <option value="grey_800" {% if config['immich'].get('overlay_bg_color', 'black') == 'grey_800' %}selected{% endif %}>Grey 800</option>
+                        <option value="grey_900" {% if config['immich'].get('overlay_bg_color', 'black') == 'grey_900' %}selected{% endif %}>Grey 900</option>
+                        <option value="yellow"     {% if config['immich'].get('overlay_bg_color', 'black') == 'yellow'     %}selected{% endif %}>Yellow</option>
+                        <option value="red"        {% if config['immich'].get('overlay_bg_color', 'black') == 'red'        %}selected{% endif %}>Red</option>
+                        <option value="blue"       {% if config['immich'].get('overlay_bg_color', 'black') == 'blue'       %}selected{% endif %}>Blue</option>
+                        <option value="green"      {% if config['immich'].get('overlay_bg_color', 'black') == 'green'      %}selected{% endif %}>Green</option>
                     </select>
                     <div class="small-text">Used in Background style only.</div>
                 </div>
                 <div class="form-group">
                     <label for="overlay_text_color">Text Color:</label>
                     <select id="overlay_text_color" name="overlay_text_color">
-                        <option value="black"  {% if config['immich'].get('overlay_text_color', 'white') == 'black'  %}selected{% endif %}>Black</option>
-                        <option value="white"  {% if config['immich'].get('overlay_text_color', 'white') == 'white'  %}selected{% endif %}>White</option>
-                        <option value="yellow" {% if config['immich'].get('overlay_text_color', 'white') == 'yellow' %}selected{% endif %}>Yellow</option>
-                        <option value="red"    {% if config['immich'].get('overlay_text_color', 'white') == 'red'    %}selected{% endif %}>Red</option>
-                        <option value="blue"   {% if config['immich'].get('overlay_text_color', 'white') == 'blue'   %}selected{% endif %}>Blue</option>
-                        <option value="green"  {% if config['immich'].get('overlay_text_color', 'white') == 'green'  %}selected{% endif %}>Green</option>
+                        <option value="black"      {% if config['immich'].get('overlay_text_color', 'white') == 'black'      %}selected{% endif %}>Black</option>
+                        <option value="white"      {% if config['immich'].get('overlay_text_color', 'white') == 'white'      %}selected{% endif %}>White</option>
+                        <option value="grey_100" {% if config['immich'].get('overlay_text_color', 'white') == 'grey_100' %}selected{% endif %}>Grey 100</option>
+                        <option value="grey_200" {% if config['immich'].get('overlay_text_color', 'white') == 'grey_200' %}selected{% endif %}>Grey 200</option>
+                        <option value="grey_300" {% if config['immich'].get('overlay_text_color', 'white') == 'grey_300' %}selected{% endif %}>Grey 300</option>
+                        <option value="grey_400" {% if config['immich'].get('overlay_text_color', 'white') == 'grey_400' %}selected{% endif %}>Grey 400</option>
+                        <option value="grey_500" {% if config['immich'].get('overlay_text_color', 'white') == 'grey_500' %}selected{% endif %}>Grey 500</option>
+                        <option value="grey_600" {% if config['immich'].get('overlay_text_color', 'white') == 'grey_600' %}selected{% endif %}>Grey 600</option>
+                        <option value="grey_700" {% if config['immich'].get('overlay_text_color', 'white') == 'grey_700' %}selected{% endif %}>Grey 700</option>
+                        <option value="grey_800" {% if config['immich'].get('overlay_text_color', 'white') == 'grey_800' %}selected{% endif %}>Grey 800</option>
+                        <option value="grey_900" {% if config['immich'].get('overlay_text_color', 'white') == 'grey_900' %}selected{% endif %}>Grey 900</option>
+                        <option value="yellow"     {% if config['immich'].get('overlay_text_color', 'white') == 'yellow'     %}selected{% endif %}>Yellow</option>
+                        <option value="red"        {% if config['immich'].get('overlay_text_color', 'white') == 'red'        %}selected{% endif %}>Red</option>
+                        <option value="blue"       {% if config['immich'].get('overlay_text_color', 'white') == 'blue'       %}selected{% endif %}>Blue</option>
+                        <option value="green"      {% if config['immich'].get('overlay_text_color', 'white') == 'green'      %}selected{% endif %}>Green</option>
                     </select>
                     <div class="small-text">Used in both styles.</div>
                 </div>
                 <div class="form-group">
                     <label for="overlay_border_color">Border (Stroke) Color:</label>
                     <select id="overlay_border_color" name="overlay_border_color">
-                        <option value="black"  {% if config['immich'].get('overlay_border_color', 'white') == 'black'  %}selected{% endif %}>Black</option>
-                        <option value="white"  {% if config['immich'].get('overlay_border_color', 'white') == 'white'  %}selected{% endif %}>White</option>
-                        <option value="yellow" {% if config['immich'].get('overlay_border_color', 'white') == 'yellow' %}selected{% endif %}>Yellow</option>
-                        <option value="red"    {% if config['immich'].get('overlay_border_color', 'white') == 'red'    %}selected{% endif %}>Red</option>
-                        <option value="blue"   {% if config['immich'].get('overlay_border_color', 'white') == 'blue'   %}selected{% endif %}>Blue</option>
-                        <option value="green"  {% if config['immich'].get('overlay_border_color', 'white') == 'green'  %}selected{% endif %}>Green</option>
+                        <option value="black"      {% if config['immich'].get('overlay_border_color', 'white') == 'black'      %}selected{% endif %}>Black</option>
+                        <option value="white"      {% if config['immich'].get('overlay_border_color', 'white') == 'white'      %}selected{% endif %}>White</option>
+                        <option value="grey_100" {% if config['immich'].get('overlay_border_color', 'white') == 'grey_100' %}selected{% endif %}>Grey 100</option>
+                        <option value="grey_200" {% if config['immich'].get('overlay_border_color', 'white') == 'grey_200' %}selected{% endif %}>Grey 200</option>
+                        <option value="grey_300" {% if config['immich'].get('overlay_border_color', 'white') == 'grey_300' %}selected{% endif %}>Grey 300</option>
+                        <option value="grey_400" {% if config['immich'].get('overlay_border_color', 'white') == 'grey_400' %}selected{% endif %}>Grey 400</option>
+                        <option value="grey_500" {% if config['immich'].get('overlay_border_color', 'white') == 'grey_500' %}selected{% endif %}>Grey 500</option>
+                        <option value="grey_600" {% if config['immich'].get('overlay_border_color', 'white') == 'grey_600' %}selected{% endif %}>Grey 600</option>
+                        <option value="grey_700" {% if config['immich'].get('overlay_border_color', 'white') == 'grey_700' %}selected{% endif %}>Grey 700</option>
+                        <option value="grey_800" {% if config['immich'].get('overlay_border_color', 'white') == 'grey_800' %}selected{% endif %}>Grey 800</option>
+                        <option value="grey_900" {% if config['immich'].get('overlay_border_color', 'white') == 'grey_900' %}selected{% endif %}>Grey 900</option>
+                        <option value="yellow"     {% if config['immich'].get('overlay_border_color', 'white') == 'yellow'     %}selected{% endif %}>Yellow</option>
+                        <option value="red"        {% if config['immich'].get('overlay_border_color', 'white') == 'red'        %}selected{% endif %}>Red</option>
+                        <option value="blue"       {% if config['immich'].get('overlay_border_color', 'white') == 'blue'       %}selected{% endif %}>Blue</option>
+                        <option value="green"      {% if config['immich'].get('overlay_border_color', 'white') == 'green'      %}selected{% endif %}>Green</option>
                     </select>
                     <div class="small-text">Used in Outline style only.</div>
+                </div>
+                <div class="small-text" style="margin-top:-8px; margin-bottom:12px;">
+                    Grey 100–200 render as near-black and Grey 700–900 as near-white on the e-paper display.
+                    Grey 300–600 may render as green due to the display's 6-color palette — use with care.
                 </div>
                 <div class="form-group">
                     <label for="overlay_font_size">Font Size:</label>
@@ -575,6 +606,49 @@
                             value="{{ config['immich'].get('overlay_stroke_width', 2) }}" oninput="updateSliderValue(this)">
                         <output class="slider-value">{{ config['immich'].get('overlay_stroke_width', 2) }}</output>
                     </div>
+                </div>
+                <div class="form-group">
+                    <label for="overlay_margin_h">Horizontal Margin (px):</label>
+                    <div class="slider-container">
+                        <input type="range" id="overlay_margin_h" name="overlay_margin_h" min="0" max="200" step="10"
+                            value="{{ config['immich'].get('overlay_margin_h', 0) }}" oninput="updateSliderValue(this)">
+                        <output class="slider-value">{{ config['immich'].get('overlay_margin_h', 0) }}</output>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="overlay_margin_v">Vertical Margin (px):</label>
+                    <div class="slider-container">
+                        <input type="range" id="overlay_margin_v" name="overlay_margin_v" min="0" max="200" step="10"
+                            value="{{ config['immich'].get('overlay_margin_v', 0) }}" oninput="updateSliderValue(this)">
+                        <output class="slider-value">{{ config['immich'].get('overlay_margin_v', 0) }}</output>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 class="card-title">Battery Indicator</h2>
+                <div class="form-group">
+                    <label for="battery_indicator_enabled">Show Low-Battery Icon:</label>
+                    <select id="battery_indicator_enabled" name="battery_indicator_enabled">
+                        <option value="off" {% if config['immich'].get('battery_indicator_enabled', 'on') == 'off' %}selected{% endif %}>Off</option>
+                        <option value="on"  {% if config['immich'].get('battery_indicator_enabled', 'on') == 'on'  %}selected{% endif %}>On</option>
+                    </select>
+                    <div class="small-text">Shows a battery icon only when the device reports a low (≤20%) or flat (≤5%) charge. Never shown on USB power or when no battery data has been received.</div>
+                </div>
+                <div class="form-group">
+                    <label for="battery_indicator_position">Icon Position:</label>
+                    <select id="battery_indicator_position" name="battery_indicator_position">
+                        <option value="topLeft"      {% if config['immich'].get('battery_indicator_position', 'topRight') == 'topLeft' %}selected{% endif %}>Top Left</option>
+                        <option value="topCenter"    {% if config['immich'].get('battery_indicator_position', 'topRight') == 'topCenter' %}selected{% endif %}>Top Center</option>
+                        <option value="topRight"     {% if config['immich'].get('battery_indicator_position', 'topRight') == 'topRight' %}selected{% endif %}>Top Right</option>
+                        <option value="centerLeft"   {% if config['immich'].get('battery_indicator_position', 'topRight') == 'centerLeft' %}selected{% endif %}>Center Left</option>
+                        <option value="center"       {% if config['immich'].get('battery_indicator_position', 'topRight') == 'center' %}selected{% endif %}>Center</option>
+                        <option value="centerRight"  {% if config['immich'].get('battery_indicator_position', 'topRight') == 'centerRight' %}selected{% endif %}>Center Right</option>
+                        <option value="bottomLeft"   {% if config['immich'].get('battery_indicator_position', 'topRight') == 'bottomLeft' %}selected{% endif %}>Bottom Left</option>
+                        <option value="bottomCenter" {% if config['immich'].get('battery_indicator_position', 'topRight') == 'bottomCenter' %}selected{% endif %}>Bottom Center</option>
+                        <option value="bottomRight"  {% if config['immich'].get('battery_indicator_position', 'topRight') == 'bottomRight' %}selected{% endif %}>Bottom Right</option>
+                    </select>
+                    <div class="small-text">Independent of the date overlay position — they may share a corner.</div>
                 </div>
             </div>
 

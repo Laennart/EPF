@@ -17,7 +17,8 @@
 // Battery ADC configuration (EE02 board — confirmed from schematic)
 #define BAT_ADC_PIN          1U    // GPIO1 = BAT_ADC net (A0/D0)
 #define ADC_EN_PIN           6U    // GPIO6 = ADC_EN net (D5/A5 on XIAO) — drives TPS22916 load switch
-#define MIN_BATTERY_VOLTAGE  3050U // mV — below this triggers 24h sleep
+#define MIN_BATTERY_VOLTAGE  3050U // mV — below this triggers low-battery guard
+#define LOW_BATTERY_ESCALATION_THRESHOLD 4U // consecutive low-voltage boots before escalating retry sleep to 24h (D-15)
 
 // Sleep and timing configuration
 #define SLEEP_TIME_COMPENSATION 1.009f // Sleep time compensation factor
@@ -31,9 +32,24 @@
 // HTTP chunk size for streaming reads (frame buffer is allocated in PSRAM)
 #define HTTP_CHUNK_SIZE 16384U  // HTTP read chunk size (frame buffer is in PSRAM)
 
+// Power management constants
+#define CPU_FREQ_MHZ         80U   // Active-period CPU clock; 80 MHz is min safe with WiFi (240->80 saves ~34 mA)
+#define WIFI_TX_POWER        WIFI_POWER_11dBm // Lowest confirmed-working level for 960 KB binary transfers (8.5 dBm drops under load)
+
 #define SERVER_BASE_URL "http://server.ip:15001"
-// HTTP Basic Auth password (must match server APP_PASSWORD env var). Empty = no auth.
-#define APP_PASSWORD ""
+
+// HTTP Basic Auth password (must match the server's APP_PASSWORD env var).
+// Empty = no auth. Real credentials belong in secrets.h, which is gitignored so
+// they can never be committed by accident: copy secrets.example.h to secrets.h
+// and fill it in. Without secrets.h the fallback below keeps the build working.
+#if defined(__has_include)
+#  if __has_include("secrets.h")
+#    include "secrets.h"
+#  endif
+#endif
+#ifndef APP_PASSWORD
+#  define APP_PASSWORD ""
+#endif
 #define PREFERENCES_SLEEP_TIME_KEY "refresh_rate"
 #define PREFERENCES_LAST_SLEEP_TIME "last_sleep"
 #define PREFERENCES_CONNECT_API_RETRY_COUNT "retry_count"

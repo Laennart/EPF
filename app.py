@@ -62,6 +62,10 @@ DEFAULT_CONFIG = {
         'overlay_font_size': 26,  # D-12/D-13/D-14: font px, int
         'overlay_language': 'en',  # 'en' | 'de' — Nominatim reverse-geocode language (GEO-LANG)
         'blur_radius': 30,  # px, int — GaussianBlur radius for fit mode blurred background
+        'overlay_margin_h': 0,  # D-02/D-08: horizontal passe-partout inset (px), int
+        'overlay_margin_v': 0,  # D-02/D-08: vertical passe-partout inset (px), int
+        'battery_indicator_enabled': 'on',  # D-15/D-16: show low-battery icon; select on/off
+        'battery_indicator_position': 'topRight',  # D-08/D-09/D-16: POSITIONS key, default topRight
     }
 }
 
@@ -198,18 +202,26 @@ def parse_photo_location(local_image=None, immich_exif=None):
     return None
 
 
+# Battery indicator warning thresholds (percent). Hardcoded, not configurable (D-06).
+BATTERY_LOW_THRESHOLD = 20  # battery_pct <= this and > FLAT -> partial-fill warning icon
+BATTERY_FLAT_THRESHOLD = 5  # battery_pct <= this -> empty (flat) battery outline
+
 # 9-position anchor lookup for date overlay (DO-04).
-# Each lambda returns (x, y) of the text's top-left given image w/h, text bbox w/h, and padding.
+# Each lambda returns (x, y) of the text's top-left given image w/h, text bbox w/h,
+# padding p, and optional inset margins mh (horizontal) and mv (vertical).
+# mh and mv are additive to p for edge positions; center ignores both;
+# axis-center positions (topCenter/bottomCenter/centerLeft/centerRight) use only
+# the relevant axis margin.
 POSITIONS = {
-    'topLeft': lambda w, h, tw, th, p: (p, p),
-    'topCenter': lambda w, h, tw, th, p: ((w - tw) // 2, p),
-    'topRight': lambda w, h, tw, th, p: (w - tw - p, p),
-    'centerLeft': lambda w, h, tw, th, p: (p, (h - th) // 2),
-    'center': lambda w, h, tw, th, p: ((w - tw) // 2, (h - th) // 2),
-    'centerRight': lambda w, h, tw, th, p: (w - tw - p, (h - th) // 2),
-    'bottomLeft': lambda w, h, tw, th, p: (p, h - th - p),
-    'bottomCenter': lambda w, h, tw, th, p: ((w - tw) // 2, h - th - p),
-    'bottomRight': lambda w, h, tw, th, p: (w - tw - p, h - th - p),
+    'topLeft': lambda w, h, tw, th, p, mh, mv: (p + mh, p + mv),
+    'topCenter': lambda w, h, tw, th, p, mh, mv: ((w - tw) // 2, p + mv),
+    'topRight': lambda w, h, tw, th, p, mh, mv: (w - tw - p - mh, p + mv),
+    'centerLeft': lambda w, h, tw, th, p, mh, mv: (p + mh, (h - th) // 2),
+    'center': lambda w, h, tw, th, p, mh, mv: ((w - tw) // 2, (h - th) // 2),
+    'centerRight': lambda w, h, tw, th, p, mh, mv: (w - tw - p - mh, (h - th) // 2),
+    'bottomLeft': lambda w, h, tw, th, p, mh, mv: (p + mh, h - th - p - mv),
+    'bottomCenter': lambda w, h, tw, th, p, mh, mv: ((w - tw) // 2, h - th - p - mv),
+    'bottomRight': lambda w, h, tw, th, p, mh, mv: (w - tw - p - mh, h - th - p - mv),
 }
 
 
@@ -225,6 +237,8 @@ def draw_date_overlay(
     text_color=(255, 255, 255, 255),
     border_color=(255, 255, 255, 255),
     stroke_width=2,
+    margin_h=0,
+    margin_v=0,
 ):
     """Draw a date overlay (filled-background or outline style) at position_str.
 
@@ -247,6 +261,8 @@ def draw_date_overlay(
         text_color:   RGBA tuple for the text glyph fill in both modes.
         border_color: RGBA tuple for the stroke in outline mode.
         stroke_width: Stroke width in pixels used in outline mode.
+        margin_h:     Extra horizontal inset (px) from left/right display edge, additive to padding.
+        margin_v:     Extra vertical inset (px) from top/bottom display edge, additive to padding.
     """
     bw, bh = output_img.size  # buffer dimensions (always 1200x1600)
 
@@ -265,7 +281,7 @@ def draw_date_overlay(
 
     # --- Step 2: compute overlay position in viewer space ---
     get_xy = POSITIONS.get(position_str, POSITIONS['bottomRight'])
-    x, y = get_xy(vw, vh, tw, th, padding)
+    x, y = get_xy(vw, vh, tw, th, padding, margin_h, margin_v)
 
     # --- Step 3: draw upright text on a viewer-oriented RGBA canvas ---
     viewer_canvas = Image.new('RGBA', (vw, vh), (0, 0, 0, 0))
@@ -297,6 +313,84 @@ def draw_date_overlay(
     output_img.paste(overlay_rgb, mask=mask)
 
 
+def draw_battery_indicator(output_img, battery_pct, position_str, rotation, font_size, color):
+    """Draw a battery warning icon onto output_img (PIL RGB Image, mutated in place).
+
+    Warning-only: only renders when battery level is low or flat.
+
+    Three states (BATIND-01, D-02):
+      - battery_pct > BATTERY_LOW_THRESHOLD (20): no-op — image is left byte-identical (D-19)
+      - BATTERY_FLAT_THRESHOLD < battery_pct <= BATTERY_LOW_THRESHOLD: body outline + nub + partial fill bar
+      - battery_pct <= BATTERY_FLAT_THRESHOLD (5): body outline + nub only, no fill (empty/flat icon)
+
+    Icon is rotation-aware via the same viewer-space coordinate technique as draw_date_overlay():
+    'topRight' always means the viewer's top-right regardless of rotationAngle (D-11).
+
+    Args:
+        output_img:   PIL.Image (RGB mode). Mutated in place.
+        battery_pct:  Battery percentage (0-100 float or int).
+        position_str: One of POSITIONS keys; unknown values fall back to 'topRight' (D-09).
+        rotation:     Display rotation angle in degrees (0, 90, 180, 270).
+        font_size:    Icon height in pixels (derived from overlay_font_size, default 26) (D-12).
+        color:        RGBA tuple for the icon (D-03, default white).
+    """
+    # --- Warning-only no-op guard (D-05 / D-19) ---
+    if battery_pct > BATTERY_LOW_THRESHOLD:
+        return
+
+    # --- Step 1: Compute icon geometry from font_size (D-12, D-13) ---
+    icon_h = int(font_size)
+    body_w = icon_h * 2
+    nub_w = max(1, int(icon_h * 0.2))  # ~20% of height
+    nub_h = max(1, int(icon_h * 0.5))  # ~50% of height, vertically centered
+    stroke = 2  # 2px stroke (D-13)
+    icon_w = body_w + nub_w  # total footprint including nub
+
+    # --- Step 2: Viewer canvas dims (mirror draw_date_overlay Step 1) ---
+    bw, bh = output_img.size  # buffer dimensions (always 1200x1600)
+    if rotation in (90, 270):
+        vw, vh = bh, bw
+    else:
+        vw, vh = bw, bh
+
+    # --- Step 3: Position in viewer space (mirror Step 2), default 'topRight' (D-09) ---
+    padding = 10  # fixed inset from display edge
+    get_xy = POSITIONS.get(position_str, POSITIONS['topRight'])
+    x, y = get_xy(vw, vh, icon_w, icon_h, padding, 0, 0)
+
+    # --- Step 4: Draw battery icon on an RGBA viewer canvas (mirror Step 3) ---
+    viewer_canvas = Image.new('RGBA', (vw, vh), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(viewer_canvas)
+
+    # Battery body outline (left part of footprint):
+    body = [x, y, x + body_w, y + icon_h]
+    draw.rectangle(body, outline=color, width=stroke)
+
+    # Nub on the right end (conventional orientation), vertically centered:
+    nub_top = y + (icon_h - nub_h) // 2
+    nub = [x + body_w, nub_top, x + body_w + nub_w, nub_top + nub_h]
+    draw.rectangle(nub, outline=color, width=stroke)
+
+    # Partial fill bar ONLY in the low (non-flat) state (D-02):
+    if battery_pct > BATTERY_FLAT_THRESHOLD:
+        inset = stroke + 2
+        fill_frac = max(0.15, min(1.0, battery_pct / BATTERY_LOW_THRESHOLD))
+        fill_w = int((body_w - 2 * inset) * fill_frac)
+        if fill_w > 0:
+            fill_rect = [x + inset, y + inset, x + inset + fill_w, y + icon_h - inset]
+            draw.rectangle(fill_rect, fill=color)
+    # battery_pct <= FLAT_THRESHOLD -> no fill (empty outline)
+
+    # --- Step 5: Rotate viewer canvas into buffer orientation (mirror Step 4) ---
+    if rotation != 0:
+        viewer_canvas = viewer_canvas.rotate(rotation, expand=True)
+
+    # --- Step 6: Paste overlay onto output_img using alpha mask (mirror Step 5) ---
+    overlay_rgb = viewer_canvas.convert('RGB')
+    mask = viewer_canvas.split()[3]
+    output_img.paste(overlay_rgb, mask=mask)
+
+
 current_config = DEFAULT_CONFIG.copy()
 
 # Initialize configuration
@@ -323,6 +417,10 @@ overlay_stroke_width = DEFAULT_CONFIG['immich']['overlay_stroke_width']
 overlay_font_size = DEFAULT_CONFIG['immich']['overlay_font_size']
 overlay_language = DEFAULT_CONFIG['immich']['overlay_language']
 blur_radius = DEFAULT_CONFIG['immich']['blur_radius']
+overlay_margin_h = DEFAULT_CONFIG['immich']['overlay_margin_h']
+overlay_margin_v = DEFAULT_CONFIG['immich']['overlay_margin_v']
+battery_indicator_enabled = DEFAULT_CONFIG['immich']['battery_indicator_enabled']
+battery_indicator_position = DEFAULT_CONFIG['immich']['battery_indicator_position']
 
 # Retrieve environment variables with error handling
 apikey = os.getenv('IMMICH_API_KEY')
@@ -365,14 +463,65 @@ palette = [
 OVERLAY_COLORS = {
     'black': (0, 0, 0, 255),
     'white': (255, 255, 255, 255),
+    'grey_100': (25, 25, 25, 255),
+    'grey_200': (50, 50, 50, 255),
+    'grey_300': (75, 75, 75, 255),
+    'grey_400': (100, 100, 100, 255),
+    'grey_500': (128, 128, 128, 255),
+    'grey_600': (153, 153, 153, 255),
+    'grey_700': (178, 178, 178, 255),
+    'grey_800': (204, 204, 204, 255),
+    'grey_900': (230, 230, 230, 255),
     'yellow': (255, 216, 0, 255),
     'red': (229, 57, 53, 255),
     'blue': (0, 76, 255, 255),
     'green': (29, 185, 84, 255),
 }
 
-last_battery_voltage = 0
-last_battery_update = 0
+# Battery telemetry persistence — stored alongside config.yaml in the persisted
+# /data/config volume so the last reading (and the full history) survive
+# container restarts. battery_state.json holds only the most recent reading;
+# battery_history.csv accumulates one timestamped row per report so the
+# discharge curve can be plotted to compare firmware versions objectively.
+battery_state_file = os.path.join(os.path.dirname(config_file), 'battery_state.json')
+battery_history_file = os.path.join(os.path.dirname(config_file), 'battery_history.csv')
+
+
+def load_battery_state():
+    """Return (voltage_mv, epoch_seconds) from the last persisted report, or (0, 0)."""
+    try:
+        with open(battery_state_file, 'r') as f:
+            data = json.load(f)
+        return float(data.get('voltage', 0)), float(data.get('updated', 0))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return 0.0, 0.0
+
+
+def persist_battery_reading(voltage_mv, timestamp):
+    """Atomically persist the latest reading and append a history row.
+
+    The latest-value file is written via a temp file + os.replace so a crash
+    mid-write can never corrupt it. The history file is append-only.
+    """
+    try:
+        os.makedirs(os.path.dirname(battery_state_file), exist_ok=True)
+        tmp_path = f'{battery_state_file}.tmp'
+        with open(tmp_path, 'w') as f:
+            json.dump({'voltage': voltage_mv, 'updated': timestamp}, f)
+        os.replace(tmp_path, battery_state_file)
+
+        write_header = not os.path.exists(battery_history_file)
+        with open(battery_history_file, 'a') as f:
+            if write_header:
+                f.write('iso_time,epoch,voltage_mv,percent\n')
+            iso_time = datetime.fromtimestamp(timestamp).isoformat(timespec='seconds')
+            percent = calculate_battery_percentage(voltage_mv)
+            f.write(f'{iso_time},{int(timestamp)},{voltage_mv:.0f},{percent}\n')
+    except OSError as e:
+        print(f'[WARN] Could not persist battery reading: {e}')
+
+
+last_battery_voltage, last_battery_update = load_battery_state()
 
 
 def require_auth(f):
@@ -594,7 +743,22 @@ def scale_img_in_memory(
                 text_color=OVERLAY_COLORS.get(overlay_text_color, (255, 255, 255, 255)),
                 border_color=OVERLAY_COLORS.get(overlay_border_color, (255, 255, 255, 255)),
                 stroke_width=overlay_stroke_width,
+                margin_h=overlay_margin_h,
+                margin_v=overlay_margin_v,
             )
+
+    # Low-battery warning icon (BATIND-03/04; warning-only, D-05/D-19).
+    # battery_pct comes from the live ADC voltage; 0 (USB/no data) suppresses the icon (D-07).
+    if battery_indicator_enabled == 'on':
+        battery_pct = calculate_battery_percentage(last_battery_voltage) if last_battery_voltage > 0 else 0
+        draw_battery_indicator(
+            output_img,
+            battery_pct,
+            battery_indicator_position,
+            rotation,
+            overlay_font_size,
+            OVERLAY_COLORS.get('white', (255, 255, 255, 255)),
+        )
 
     # Save image into ram
     img_io = io.BytesIO()
@@ -634,6 +798,24 @@ def convert_to_c_code_in_memory(image_data):
 
     result = output.getvalue().encode('utf-8')
     output_bytes = io.BytesIO(result)
+    output_bytes.seek(0)
+    return output_bytes
+
+
+def convert_to_binary_in_memory(image_data):
+    """Convert image to raw binary nibble frame — T133A01 4bpp, 960000 bytes."""
+    pixels = np.array(image_data)
+    indices = depalette_image(pixels, palette)
+    nibble_map = [0xF, 0x0, 0xB, 0x6, 0xD, 0x2]
+    height, width = indices.shape
+    bytes_array = [
+        (nibble_map[indices[y, x]] << 4) | nibble_map[indices[y, x + 1]]
+        if x + 1 < width
+        else (nibble_map[indices[y, x]] << 4)
+        for y in range(height)
+        for x in range(0, width, 2)
+    ]
+    output_bytes = io.BytesIO(bytes(bytes_array))
     output_bytes.seek(0)
     return output_bytes
 
@@ -741,7 +923,11 @@ def update_app_config(new_config):
         overlay_stroke_width, \
         overlay_font_size, \
         overlay_language, \
-        blur_radius
+        blur_radius, \
+        overlay_margin_h, \
+        overlay_margin_v, \
+        battery_indicator_enabled, \
+        battery_indicator_position
 
     current_config = new_config
 
@@ -783,6 +969,10 @@ def update_app_config(new_config):
     overlay_font_size = int(new_config['immich'].get('overlay_font_size', 26))
     overlay_language = new_config['immich'].get('overlay_language', 'en')
     blur_radius = int(new_config['immich'].get('blur_radius', 30))
+    overlay_margin_h = int(new_config['immich'].get('overlay_margin_h', 0))
+    overlay_margin_v = int(new_config['immich'].get('overlay_margin_v', 0))
+    battery_indicator_enabled = new_config['immich'].get('battery_indicator_enabled', 'on')
+    battery_indicator_position = new_config['immich'].get('battery_indicator_position', 'topRight')
 
     print(
         f'Configuration updated: URL = {url}, Album = {albumname}, angle = {rotationAngle}, enhance = {img_enhanced}, contrast = {img_contrast}, strength = {strength}, display_mode = {display_mode}, image_order = {image_order}'
@@ -920,6 +1110,18 @@ def settings():
                     'overlay_language', current_config['immich'].get('overlay_language', 'en')
                 ),
                 'blur_radius': int(request.form.get('blur_radius', current_config['immich'].get('blur_radius', 30))),
+                'overlay_margin_h': int(
+                    request.form.get('overlay_margin_h', current_config['immich'].get('overlay_margin_h', 0))
+                ),
+                'overlay_margin_v': int(
+                    request.form.get('overlay_margin_v', current_config['immich'].get('overlay_margin_v', 0))
+                ),
+                'battery_indicator_enabled': request.form.get(
+                    'battery_indicator_enabled', current_config['immich'].get('battery_indicator_enabled', 'on')
+                ),
+                'battery_indicator_position': request.form.get(
+                    'battery_indicator_position', current_config['immich'].get('battery_indicator_position', 'topRight')
+                ),
             }
         }
 
@@ -1034,10 +1236,15 @@ def serve_local_image():
 
     processed_image = scale_img_in_memory(image)
     processed_image.seek(0)
-    c_code = convert_to_c_code_in_memory(Image.open(processed_image))
+    frame = convert_to_binary_in_memory(Image.open(processed_image))
 
     stem = os.path.splitext(filename)[0]
-    return send_file(c_code, mimetype='text/plain', as_attachment=True, download_name=f'image_{stem}.c')
+    return send_file(
+        frame,
+        mimetype='application/octet-stream',
+        as_attachment=True,
+        download_name=f'image_{stem}.bin',
+    )
 
 
 def serve_immich_image():
@@ -1124,9 +1331,14 @@ def serve_immich_image():
         immich_exif_raw=selected_image.get('exifInfo', {}),
     )
     processed_image.seek(0)
-    c_code = convert_to_c_code_in_memory(Image.open(processed_image))
+    frame = convert_to_binary_in_memory(Image.open(processed_image))
 
-    return send_file(c_code, mimetype='text/plain', as_attachment=True, download_name=f'image_{asset_id}.c')
+    return send_file(
+        frame,
+        mimetype='application/octet-stream',
+        as_attachment=True,
+        download_name=f'image_{asset_id}.bin',
+    )
 
 
 @app.route('/download', methods=['GET'])
@@ -1140,6 +1352,7 @@ def process_and_download():
         if battery_voltage > 0:
             last_battery_voltage = battery_voltage
             last_battery_update = time.time()
+            persist_battery_reading(last_battery_voltage, last_battery_update)
     except (TypeError, ValueError):
         pass
 

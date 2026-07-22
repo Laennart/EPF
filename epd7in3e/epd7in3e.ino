@@ -30,6 +30,12 @@
 
 Preferences preferences;
 
+// Consecutive-low-battery-boot counter. RTC_DATA_ATTR survives deep sleep
+// (timer or EXT1 wake) but resets to 0 on power-on-reset/full power loss —
+// exactly the persistence semantics needed for enforceLowBatteryGuard()'s
+// escalation policy below (see D-15 rationale at enforceLowBatteryGuard()).
+RTC_DATA_ATTR static int g_lowBatteryStreak = 0;
+
 class EpaperManager
 {
 private:
@@ -38,6 +44,7 @@ private:
   String imageUrl = "";
   int m_batteryVoltageMv = 0;
   bool m_onBattery = false;
+  uint8_t *m_frameBuf = nullptr; // PSRAM frame buffer; owned between readFrameData() and renderFrame()
 
   bool downloadImage()
   {
@@ -108,11 +115,21 @@ private:
       int avgBatteryMv = (plusV / 50) * 2;  // 1:1 divider
       digitalWrite(ADC_EN_PIN, LOW);
       bool avgOnBattery = (avgBatteryMv > 1500);
-      int headerValue = avgOnBattery ? avgBatteryMv : 0;
+      // Report the TRUE measured VBAT on every cycle — including while the cell
+      // is charging on USB — so the server persists the climbing voltage and
+      // the charge curve (up to ~4200 mV = full) is visible. Previously this was
+      // forced to 0 whenever the board did not look "on battery", which hid the
+      // reading entirely while plugged in. avgOnBattery is still used below only
+      // to drive the power-management path (deep sleep vs. USB restart), not to
+      // gate what gets reported. A genuinely absent battery reads ~0 mV, which
+      // the server already ignores (its persist guard is `> 0`).
+      int headerValue = avgBatteryMv;
       http.setAuthorization("admin", APP_PASSWORD);
       http.addHeader("batteryCap", String(headerValue));
-      Serial.printf("HTTP batteryCap header: %d mV (onBattery=%s)\n",
-                    headerValue, avgOnBattery ? "true" : "false");
+      Serial.printf("HTTP batteryCap header: %d mV (%s)\n",
+                    headerValue,
+                    avgOnBattery ? "battery cell present"
+                                 : "no cell detected — USB power");
       // Refresh stored state so hibernate() sees the latest reading.
       m_batteryVoltageMv = avgBatteryMv;
       m_onBattery = avgOnBattery;
@@ -124,7 +141,7 @@ private:
 
         if (httpCode == HTTP_CODE_OK)
         {
-          success = processImageData(*http.getStreamPtr(), http.getSize());
+          success = readFrameData(*http.getStreamPtr(), http.getSize());
 
           // After successful image download, get sleep duration
           if (success)
@@ -187,8 +204,9 @@ private:
         }
         else
         {
-          Serial.printf("%s GET failed: %s\n",
+          Serial.printf("%s GET failed (code %d): %s\n",
                         isHttps ? "HTTPS" : "HTTP",
+                        httpCode,
                         http.errorToString(httpCode).c_str());
           break;
         }
@@ -202,15 +220,34 @@ private:
     if (basicClient)
       delete basicClient;
 
+    // The frame and the sleep duration are now in hand — WiFi is no longer
+    // needed. Power the radio down BEFORE the ~20-30 s panel refresh so the
+    // modem (kept awake at ~80-100 mA by autoConnect()'s WiFi.setSleep(0)) does
+    // not idle through the whole refresh. renderFrame() does the actual push +
+    // refresh; hibernate() below re-issues WiFi off on its battery path, which
+    // is harmless (idempotent).
+    if (success)
+    {
+      WiFi.disconnect(true);
+      WiFi.mode(WIFI_OFF);
+      renderFrame();
+    }
+
     // If we got a valid sleep duration, use it for hibernation
     if (success && sleepDuration > 0)
     {
       hibernate(sleepDuration);
     }
+    else if (success)
+    {
+      // Download succeeded but server didn't provide a sleep duration — use default
+      hibernate();
+    }
     else
     {
-      // Use default sleep duration if server didn't provide one
-      hibernate();
+      // Download failed — use shorter retry interval so device retries sooner
+      Serial.printf("Download failed — retrying in %d s\n", (int)MIN_SLEEP_TIME);
+      hibernate((int)MIN_SLEEP_TIME);
     }
 
     return success;
@@ -228,8 +265,14 @@ private:
     return c == ',' || c == '\n' || c == '\r' || c == '\0';
   }
 
-  // Process image data stream and update display
-  bool processImageData(WiFiClient &stream, int contentLength)
+  // Stream the raw binary frame from the HTTP response into a PSRAM buffer.
+  // READ ONLY — the ~20-30 s panel refresh is deliberately NOT done here. It is
+  // deferred to renderFrame() so it can run AFTER WiFi is powered down. The
+  // radio, left in no-sleep mode by autoConnect() (WiFi.setSleep(0)), otherwise
+  // idles at ~80-100 mA for the entire refresh — the single largest avoidable
+  // draw in the wake cycle. Ownership of the buffer passes to m_frameBuf, which
+  // renderFrame() frees.
+  bool readFrameData(WiFiClient &stream, int contentLength)
   {
     if (contentLength <= 0) {
       Serial.println("Invalid content length");
@@ -237,74 +280,45 @@ private:
     }
 
     // Allocate PSRAM frame buffer (960,000 bytes for 1200x1600 4bpp)
-    uint8_t* frame_buf = (uint8_t*)ps_malloc(1200 * 1600 / 2);
-    if (!frame_buf) {
+    const size_t FRAME_SIZE = 1200 * 1600 / 2; // 960000 bytes
+    m_frameBuf = (uint8_t*)ps_malloc(FRAME_SIZE);
+    if (!m_frameBuf) {
       Serial.println("PSRAM allocation failed — check ps_malloc availability");
       return false;
     }
-    size_t frame_offset = 0;
-    const size_t FRAME_SIZE = 1200 * 1600 / 2;
 
-    // Allocate HTTP read chunk buffer on heap
-    uint8_t* chunk_buf = (uint8_t*)malloc(HTTP_CHUNK_SIZE);
-    if (!chunk_buf) {
-      Serial.println("Chunk buffer allocation failed");
-      free(frame_buf);
-      return false;
-    }
-
-    // Stream hex-CSV response into frame_buf
-    String hexBuffer = "";
-    int bytesRead = 0;
-
-    while (stream.connected() && bytesRead < contentLength) {
+    // Stream raw binary directly into the PSRAM frame buffer (binary transport — plan 10-01).
+    size_t totalRead = 0;
+    while (stream.connected() && totalRead < FRAME_SIZE) {
       int available = stream.available();
       if (available > 0) {
-        int toRead = min(available, (int)HTTP_CHUNK_SIZE);
-        int read = stream.readBytes(chunk_buf, toRead);
-        bytesRead += read;
-
-        for (int i = 0; i < read; i++) {
-          char c = (char)chunk_buf[i];
-          if (isDelimiter(c)) {
-            if (!hexBuffer.isEmpty()) {
-              uint8_t byteValue = (uint8_t)strtol(hexBuffer.c_str(), NULL, 16);
-              if (frame_offset < FRAME_SIZE) {
-                frame_buf[frame_offset++] = byteValue;
-              }
-              hexBuffer = "";
-            }
-          } else {
-            hexBuffer += c;
-          }
-        }
+        size_t toRead = min((size_t)available, FRAME_SIZE - totalRead);
+        int read = stream.readBytes(m_frameBuf + totalRead, (int)toRead);
+        if (read > 0) totalRead += (size_t)read;
       } else {
         delay(1);
       }
     }
 
-    // Handle any remaining hex in buffer
-    if (!hexBuffer.isEmpty()) {
-      uint8_t byteValue = (uint8_t)strtol(hexBuffer.c_str(), NULL, 16);
-      if (frame_offset < FRAME_SIZE) {
-        frame_buf[frame_offset++] = byteValue;
-      }
+    if (totalRead != FRAME_SIZE) {
+      Serial.printf("Warning: expected %d bytes, received %d\n", (int)FRAME_SIZE, (int)totalRead);
     }
+    return true;
+  }
 
-    free(chunk_buf);
-
-    if (frame_offset != FRAME_SIZE) {
-      Serial.printf("Warning: expected %d bytes, received %d\n", (int)FRAME_SIZE, (int)frame_offset);
-    }
-
-    // Push frame to display and trigger refresh
+  // Push the previously-read frame to the panel, trigger the refresh, and
+  // release the PSRAM buffer. MUST be called only after WiFi is powered down
+  // (see readFrameData() rationale). No-op if no frame was read.
+  void renderFrame()
+  {
+    if (!m_frameBuf) return;
     Serial.println("Pushing image to display...");
-    epaper.pushImage(0, 0, EPD_WIDTH, EPD_HEIGHT, (uint16_t*)frame_buf);
+    epaper.pushImage(0, 0, EPD_WIDTH, EPD_HEIGHT, (uint16_t*)m_frameBuf);
     epaper.update();
     epaper.sleep();
-    free(frame_buf);
+    free(m_frameBuf);
+    m_frameBuf = nullptr;
     Serial.println("Display updated");
-    return true;
   }
 
   // Enter low-power state with calculated wake-up interval.
@@ -318,7 +332,7 @@ private:
       // USB power path (BV-02, BV-03): skip deep sleep entirely.
       // delay() in Arduino-ESP32 calls vTaskDelay internally, which feeds the
       // task watchdog. Cast to uint32_t to avoid int*int overflow at >2147s.
-      Serial.printf("USB power: waiting %d s then restarting\n", sleep_interval);
+      Serial.printf("No battery cell — waiting %d s then restarting\n", sleep_interval);
       Serial.flush();
       delay((uint32_t)sleep_interval * 1000UL);
       ESP.restart();
@@ -326,9 +340,22 @@ private:
     }
 
     // Battery power path (BV-03): full deep sleep.
-    Serial.printf("Battery power: entering deep sleep for %d s\n", sleep_interval);
+    Serial.printf("Battery cell present — entering deep sleep for %d s\n", sleep_interval);
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
+    rtc_gpio_isolate(GPIO_NUM_1);  // BAT_ADC_PIN — prevent ADC leakage path in deep sleep
+    rtc_gpio_isolate(GPIO_NUM_6);  // ADC_EN_PIN — fully gate TPS22916 load switch
+    // Tri-state SPI/display control pins before deep sleep to eliminate leakage
+    // through the e-paper protection diodes. epaper.sleep() (sent by update())
+    // only issues a software command — it does NOT change GPIO directions.
+    // GPIO8/9/10/38/41/44 are digital-only on ESP32-S3 (NOT RTC-capable), so
+    // rtc_gpio_isolate() does not apply; use SPI.end() + pinMode(INPUT) instead.
+    // Do NOT use the gpio reset pin API — community reports it can block deep-sleep entry.
+    SPI.end();                  // releases GPIO8 (SCLK) and GPIO9 (MOSI) from the SPI peripheral
+    pinMode(DC_PIN,  INPUT);    // GPIO10
+    pinMode(CS_PIN,  INPUT);    // GPIO44
+    pinMode(CS1_PIN, INPUT);    // GPIO41
+    pinMode(RST_PIN, INPUT);    // GPIO38
     fs_deinit();
     delay(50);
 
@@ -358,12 +385,17 @@ private:
   // Check if configuration mode should be entered
   bool shouldEnterConfigMode()
   {
-    // Check configuration pin with debounce
-    // if (digitalRead(CONFIG_PIN) == LOW) {
-    //   delay(BUTTON_DEBOUNCE);
-    //   return digitalRead(CONFIG_PIN) == LOW;
-    // }
-    // return false;
+    // Timer wakeups are unattended production refresh cycles — no user is
+    // present to hold the config button, so skip the Button poll entirely.
+    // Button::result() blocks a minimum of ~1.5 s waiting for events; running
+    // it on every hourly wake wastes ~0.3 mAh/day at ~80 mA for nothing.
+    // A deliberate config-button press wakes the board via EXT1 (WAKEUP_PIN ==
+    // CONFIG_PIN == GPIO2), and cold boot / reset is also a user-present event —
+    // both still run the full poll so config mode remains reachable.
+    if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER)
+    {
+      return false;
+    }
     Button button(CONFIG_PIN);
     return button.result();
   }
@@ -394,14 +426,17 @@ public:
     // initialize preferences
     preferences.begin("data", true);
 
+    setCpuFrequencyMhz(CPU_FREQ_MHZ);   // 240->80 MHz before WiFi connect
     WiFi.mode(WIFI_STA);
+    WiFi.setTxPower(WIFI_TX_POWER);     // LAN-adequate 8.5 dBm
 
     // Check configuration button
     if (shouldEnterConfigMode())
     {
       Serial.println(F("Config button pressed, entering config mode..."));
-      epaper.fillScreen(TFT_WHITE); epaper.update();
-      // epaper.sleep();
+      // The panel is intentionally left untouched: e-paper is bistable, so the
+      // last photo stays visible while the captive portal runs. Blanking it
+      // would also cost a full ~20-30 s refresh before the portal came up.
 
       bool res = WifiCaptivePortal.startPortal();
       if (res)
@@ -473,20 +508,60 @@ public:
     hibernate();
   }
 
-  // Clear the e-paper display
-  void clearScreen()
+  // NOTE: there is deliberately no clearScreen()/blank-the-panel helper. The
+  // display must never be cleared — e-paper is bistable, so whatever was last
+  // rendered stays visible at zero power, and a full white refresh costs
+  // ~20-30 s at high current. Every former call site (low-battery guard,
+  // failed startup, config mode) now leaves the last photo in place.
+
+  // Startup failed — no WiFi configuration, or the connection attempt failed.
+  //
+  // Deliberately does NOT clear the panel: e-paper is bistable, so the last
+  // rendered frame stays visible at zero power. A transient router outage must
+  // not wipe the user's photo.
+  //
+  // On battery, enter the normal short retry sleep. The old delay(30000) +
+  // ESP.restart() busy loop held the board at ~100 mA continuously — a router
+  // that went down overnight could flatten the cell by morning. On USB (no cell
+  // detected) keep the quick restart instead, so the config portal comes back
+  // promptly for a user who is standing there setting up WiFi; there is no
+  // battery to protect in that case. Does not return either way.
+  //
+  // Safe to call before begin() has initialised the panel — nothing here
+  // touches the display. m_onBattery is already valid because setup() runs
+  // checkVoltage() before begin().
+  void handleFailedStart()
   {
-    epaper.begin();
-    delay(100);
-    epaper.fillScreen(TFT_WHITE);
-    epaper.update();
-    epaper.sleep();
+    if (m_onBattery)
+    {
+      Serial.printf("Startup failed on battery — sleeping %u s before retry\n",
+                    (unsigned)MIN_SLEEP_TIME);
+      hibernate((int)MIN_SLEEP_TIME); // deep sleep; does not return
+      return;
+    }
+    Serial.println(F("Startup failed, no cell detected (USB) — restarting shortly"));
+    Serial.flush();
+    delay(30000);
+    ESP.restart();
   }
 
   // Read battery voltage via GPIO1 ADC behind GPIO5 ADC_EN gate.
-  // Returns mV (after 1:1 divider compensation). Single-sample read for
-  // the low-battery guard. The averaged read for the HTTP header is
-  // handled separately in downloadImage() (Plan 02).
+  // Returns mV (after 1:1 divider compensation).
+  //
+  // NOTE on "Power source" naming: this board has NO USB/VBUS-sense GPIO
+  // (confirmed from EE02 schematic — see .planning/phases/04-battery-voltage/
+  // 04-RESEARCH.md). m_onBattery is therefore only a proxy for "a battery
+  // cell is physically connected" (VBAT floats near 0V with none attached);
+  // it CANNOT distinguish "running on battery" from "running on USB with a
+  // battery also connected." The BQ24070 PMIC keeps VBAT elevated whenever
+  // ANY power source is present, so m_onBattery is true in the overwhelming
+  // majority of real-world (USB-plugged) boots too. Do not use this flag as
+  // proof the device is unattended/unplugged.
+  //
+  // Multi-sample averaged read (10 samples) — matches the noise-reduction
+  // approach already used for the HTTP header read in downloadImage() to
+  // avoid single-sample ADC jitter (~50-100mV, documented in 04-RESEARCH.md)
+  // flipping the guard decision near the MIN_BATTERY_VOLTAGE threshold.
   int checkVoltage()
   {
     pinMode(ADC_EN_PIN, OUTPUT);
@@ -495,13 +570,25 @@ public:
     analogReadResolution(12);
     digitalWrite(ADC_EN_PIN, HIGH);
     delay(10);  // load switch + divider settle time
-    int rawMv = analogReadMilliVolts(BAT_ADC_PIN);
+    const int kSamples = 10;
+    long rawMvSum = 0;
+    for (int i = 0; i < kSamples; i++) {
+      rawMvSum += analogReadMilliVolts(BAT_ADC_PIN);
+      delay(5);
+    }
     digitalWrite(ADC_EN_PIN, LOW);
-    int vbatMv = rawMv * 2;  // 1:1 divider (R28=R29=10kΩ)
+    int vbatMv = (int)((rawMvSum / kSamples) * 2);  // 1:1 divider (R28=R29=10kΩ)
     m_batteryVoltageMv = vbatMv;
     m_onBattery = (vbatMv > 1500);
     Serial.printf("Battery voltage: %d mV\n", vbatMv);
-    Serial.printf("Power source: %s\n", m_onBattery ? "battery" : "USB");
+    // This board has no VBUS/power-good sense line (see the class-level note on
+    // enforceLowBatteryGuard()), so "cell present" CANNOT be distinguished from
+    // "on USB and charging" — VBAT reads a valid cell voltage in both cases.
+    // Only "no cell" reliably implies USB power. Report what is actually
+    // knowable instead of asserting a false USB/battery call.
+    Serial.printf("Battery status: %s\n",
+                  m_onBattery ? "cell present (on battery or charging via USB)"
+                              : "no cell detected — running on USB");
     return vbatMv;
   }
 
@@ -510,18 +597,75 @@ public:
   int batteryVoltageMv() const { return m_batteryVoltageMv; }
 
   // Low-battery guard: if running on battery and below MIN_BATTERY_VOLTAGE,
-  // clear screen, disable WiFi, and enter 24h deep sleep. Does not return.
+  // clear screen, disable WiFi, and enter a protective deep sleep. Does not
+  // return (when it fires).
+  //
+  // IMPORTANT: because m_onBattery cannot distinguish "on battery" from
+  // "on USB with VBAT coincidentally below threshold" (see checkVoltage()
+  // note above — this board has no VBUS-sense/PG GPIO; re-confirmed directly
+  // against the EE02 v1.0 schematic — BQ24070 ~PG pin 18 is explicitly
+  // unpopulated on this board revision, and STAT1/STAT2 only drive the
+  // charge-status LEDs, not any GPIO), this guard can fire even while the
+  // board is powered externally by USB with a low/aging/not-yet-charged
+  // battery cell attached.
+  //
+  // D-15 (escalation policy, added after real-hardware report that a single
+  // low reading was bricking a USB-powered board for a full 24h): rather than
+  // committing to an unrecoverable 24h sleep on the FIRST low-voltage boot,
+  // treat the first (streak < LOW_BATTERY_ESCALATION_THRESHOLD) low readings
+  // as "possibly transient / possibly USB-powered with a low cell" and only
+  // sleep for MIN_SLEEP_TIME (short retry, matches the interval already used
+  // for failed-download retries). If the board is genuinely on USB power,
+  // the BQ24070 will have recharged the cell above threshold well before the
+  // streak counter escalates, and the device recovers on its own within a
+  // few short cycles instead of appearing bricked. Only after
+  // LOW_BATTERY_ESCALATION_THRESHOLD consecutive independent boots still
+  // read low (meaning the board is truly unattended on a dying/disconnected
+  // battery, not USB-recharging between checks) does the guard escalate to
+  // the full 24h protective sleep. g_lowBatteryStreak is RTC_DATA_ATTR so it
+  // survives the short deep-sleep/wake cycles used here but resets to 0 on a
+  // genuine power-on-reset (e.g. user unplugs/replugs), which is exactly the
+  // desired reset condition. EXT1 GPIO wakeup on WAKEUP_PIN is armed
+  // alongside the timer wakeup at every stage (mirrors hibernate()'s
+  // battery-sleep path) so pressing the wake button always recovers the
+  // device immediately regardless of which sleep duration is active.
   void enforceLowBatteryGuard()
   {
-    if (m_onBattery && m_batteryVoltageMv < (int)MIN_BATTERY_VOLTAGE) {
-      Serial.printf("Battery low (%d mV < %u mV) — sleeping 24h\n",
-                    m_batteryVoltageMv, (unsigned)MIN_BATTERY_VOLTAGE);
-      clearScreen();
-      WiFi.disconnect(true);
-      WiFi.mode(WIFI_OFF);
-      esp_sleep_enable_timer_wakeup(86400ULL * 1000000ULL);
-      esp_deep_sleep_start();
+    if (!(m_onBattery && m_batteryVoltageMv < (int)MIN_BATTERY_VOLTAGE)) {
+      g_lowBatteryStreak = 0; // voltage recovered (or no battery signal) — clear streak
+      return;
     }
+
+    g_lowBatteryStreak++;
+    bool escalate = g_lowBatteryStreak >= LOW_BATTERY_ESCALATION_THRESHOLD;
+    uint64_t sleepSeconds = escalate ? 86400ULL : (uint64_t)MIN_SLEEP_TIME;
+
+    Serial.printf("Battery low (%d mV < %u mV), streak=%d — sleeping %s\n",
+                  m_batteryVoltageMv, (unsigned)MIN_BATTERY_VOLTAGE,
+                  g_lowBatteryStreak,
+                  escalate ? "24h (escalated)" : "briefly (retry)");
+    // Deliberately NOT clearing the panel before sleeping. E-paper is bistable:
+    // the last rendered frame stays visible at zero power, so leaving it shows
+    // the user their photo (with the low-battery indicator already drawn on it)
+    // instead of a blank white screen that looks like a dead device. Clearing
+    // would also burn a full ~20-30 s panel refresh at high current — the worst
+    // possible thing to spend charge on precisely when the battery is critical.
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    rtc_gpio_isolate(GPIO_NUM_1);  // BAT_ADC_PIN — prevent ADC leakage path in deep sleep
+    rtc_gpio_isolate(GPIO_NUM_6);  // ADC_EN_PIN — fully gate TPS22916 load switch
+    SPI.end();                  // releases GPIO8 (SCLK) and GPIO9 (MOSI) from the SPI peripheral
+    pinMode(DC_PIN,  INPUT);    // GPIO10
+    pinMode(CS_PIN,  INPUT);    // GPIO44
+    pinMode(CS1_PIN, INPUT);    // GPIO41
+    pinMode(RST_PIN, INPUT);    // GPIO38
+    esp_sleep_enable_timer_wakeup(sleepSeconds * 1000000ULL);
+    rtc_gpio_init(WAKEUP_PIN);
+    rtc_gpio_set_direction(WAKEUP_PIN, RTC_GPIO_MODE_INPUT_ONLY);
+    rtc_gpio_pullup_en(WAKEUP_PIN);
+    rtc_gpio_pulldown_dis(WAKEUP_PIN);
+    esp_sleep_enable_ext1_wakeup(1ULL << WAKEUP_PIN, ESP_EXT1_WAKEUP_ANY_LOW);
+    esp_deep_sleep_start();
   }
 };
 
@@ -531,16 +675,23 @@ EpaperManager epaperManager;
 void setup()
 {
   Serial.begin(115200);
-  delay(3000); // wait for USB-CDC serial monitor to connect
   // KNOWN HARDWARE LIMITATION (BV-05, D-12/D-13/D-14):
   // The green charge LEDs (D5, D16 on EE02 board) are driven by the
   // BQ24070 PMIC's STAT1/STAT2 open-drain outputs and are NOT connected
   // to any XIAO GPIO. When no battery is present the PMIC enters a
   // no-battery fault state and the LEDs blink. This cannot be suppressed
   // from firmware. Accepted as a hardware-only behavior.
-  
-  // Determine wake up reason
+
+  // Determine wake up reason BEFORE the serial-monitor delay so production
+  // deep-sleep wakeups skip the 3 s wait (saves ~0.056 mAh per cycle).
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+  bool isDevelopmentBoot = (wakeup_reason != ESP_SLEEP_WAKEUP_TIMER &&
+                            wakeup_reason != ESP_SLEEP_WAKEUP_EXT1);
+  if (isDevelopmentBoot) {
+    delay(3000); // cold boot/reset: wait for USB-CDC serial monitor to enumerate
+  } else {
+    delay(50);   // production wakeup: minimal USB-CDC settle time
+  }
 
   if (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER)
   {
@@ -555,6 +706,21 @@ void setup()
     Serial.println("First boot or reset");
   }
 
+  // Release the RTC hold placed on the battery-sense pins before the previous
+  // deep sleep. hibernate()/enforceLowBatteryGuard() call rtc_gpio_isolate() on
+  // GPIO1 (BAT_ADC) and GPIO6 (ADC_EN) to kill ADC leakage during sleep, and
+  // rtc_gpio_isolate() latches the pad via rtc_gpio_hold_en(). That latch
+  // SURVIVES the wake, so without releasing it here GPIO6 stays disabled — the
+  // TPS22916 load switch never turns on and the BAT_ADC divider is left
+  // unpowered — making every post-sleep read return ~0 mV. Cold boot has no
+  // latch, which is why only the very first reading looked correct. Release the
+  // hold and hand both pads back to the normal digital/ADC path before
+  // checkVoltage() runs.
+  rtc_gpio_hold_dis(GPIO_NUM_1);
+  rtc_gpio_deinit(GPIO_NUM_1);
+  rtc_gpio_hold_dis(GPIO_NUM_6);
+  rtc_gpio_deinit(GPIO_NUM_6);
+
   epaperManager.checkVoltage();
   epaperManager.enforceLowBatteryGuard();
 
@@ -566,10 +732,7 @@ void setup()
   else
   {
     Serial.println(F("Begin failed"));
-    epaperManager.clearScreen();
-
-    delay(30000);
-    ESP.restart();
+    epaperManager.handleFailedStart();
   }
 }
 
