@@ -616,7 +616,12 @@ public:
                   m_batteryVoltageMv, (unsigned)MIN_BATTERY_VOLTAGE,
                   g_lowBatteryStreak,
                   escalate ? "24h (escalated)" : "briefly (retry)");
-    clearScreen();
+    // Deliberately NOT clearing the panel before sleeping. E-paper is bistable:
+    // the last rendered frame stays visible at zero power, so leaving it shows
+    // the user their photo (with the low-battery indicator already drawn on it)
+    // instead of a blank white screen that looks like a dead device. Clearing
+    // would also burn a full ~20-30 s panel refresh at high current — the worst
+    // possible thing to spend charge on precisely when the battery is critical.
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
     rtc_gpio_isolate(GPIO_NUM_1);  // BAT_ADC_PIN — prevent ADC leakage path in deep sleep
