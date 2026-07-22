@@ -517,6 +517,37 @@ public:
     epaper.sleep();
   }
 
+  // Startup failed — no WiFi configuration, or the connection attempt failed.
+  //
+  // Deliberately does NOT clear the panel: e-paper is bistable, so the last
+  // rendered frame stays visible at zero power. A transient router outage must
+  // not wipe the user's photo.
+  //
+  // On battery, enter the normal short retry sleep. The old delay(30000) +
+  // ESP.restart() busy loop held the board at ~100 mA continuously — a router
+  // that went down overnight could flatten the cell by morning. On USB (no cell
+  // detected) keep the quick restart instead, so the config portal comes back
+  // promptly for a user who is standing there setting up WiFi; there is no
+  // battery to protect in that case. Does not return either way.
+  //
+  // Safe to call before begin() has initialised the panel — nothing here
+  // touches the display. m_onBattery is already valid because setup() runs
+  // checkVoltage() before begin().
+  void handleFailedStart()
+  {
+    if (m_onBattery)
+    {
+      Serial.printf("Startup failed on battery — sleeping %u s before retry\n",
+                    (unsigned)MIN_SLEEP_TIME);
+      hibernate((int)MIN_SLEEP_TIME); // deep sleep; does not return
+      return;
+    }
+    Serial.println(F("Startup failed, no cell detected (USB) — restarting shortly"));
+    Serial.flush();
+    delay(30000);
+    ESP.restart();
+  }
+
   // Read battery voltage via GPIO1 ADC behind GPIO5 ADC_EN gate.
   // Returns mV (after 1:1 divider compensation).
   //
@@ -704,10 +735,7 @@ void setup()
   else
   {
     Serial.println(F("Begin failed"));
-    epaperManager.clearScreen();
-
-    delay(30000);
-    ESP.restart();
+    epaperManager.handleFailedStart();
   }
 }
 
