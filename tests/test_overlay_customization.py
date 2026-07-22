@@ -19,10 +19,21 @@ def test_overlay_colors_dict():
     from app import OVERLAY_COLORS
 
     assert set(OVERLAY_COLORS.keys()) == {
-        'black', 'white',
-        'grey_100', 'grey_200', 'grey_300', 'grey_400', 'grey_500',
-        'grey_600', 'grey_700', 'grey_800', 'grey_900',
-        'yellow', 'red', 'blue', 'green',
+        'black',
+        'white',
+        'grey_100',
+        'grey_200',
+        'grey_300',
+        'grey_400',
+        'grey_500',
+        'grey_600',
+        'grey_700',
+        'grey_800',
+        'grey_900',
+        'yellow',
+        'red',
+        'blue',
+        'green',
     }
     assert OVERLAY_COLORS['black'] == (0, 0, 0, 255)
     assert OVERLAY_COLORS['white'] == (255, 255, 255, 255)

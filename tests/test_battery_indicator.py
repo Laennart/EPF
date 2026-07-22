@@ -10,6 +10,7 @@ Contract:
   - flat state has fewer non-white pixels than low state (fill bar absent)
   - position_str is honored (different positions -> different images)
 """
+
 import inspect
 
 from PIL import Image
@@ -69,43 +70,41 @@ def test_above_threshold_is_noop():
     img_a = Image.new('RGB', (1200, 1600), (255, 255, 255))
     img_b = Image.new('RGB', (1200, 1600), (255, 255, 255))
     _draw(img_b, pct=50)
-    assert img_a.tobytes() == img_b.tobytes(), (
-        "Image should be unchanged when battery_pct > BATTERY_LOW_THRESHOLD"
-    )
+    assert img_a.tobytes() == img_b.tobytes(), 'Image should be unchanged when battery_pct > BATTERY_LOW_THRESHOLD'
 
 
 def test_at_threshold_boundary_low_draws():
     """battery_pct == 20 is inclusive low boundary -> icon must appear (non-white pixels)."""
     img = _fresh_white()
     _draw(img, pct=20)
-    assert _nonwhite(img) > 0, "battery_pct=20 (inclusive boundary) must draw the icon"
+    assert _nonwhite(img) > 0, 'battery_pct=20 (inclusive boundary) must draw the icon'
 
 
 def test_low_state_draws_partial_fill():
     """BATIND-01: battery_pct=10 produces non-white pixels (icon + fill bar present)."""
     img = _fresh_white()
     _draw(img, pct=10)
-    assert _nonwhite(img) > 0, "battery_pct=10 must draw a partial-fill icon"
+    assert _nonwhite(img) > 0, 'battery_pct=10 must draw a partial-fill icon'
 
 
 def test_flat_state_draws_empty_outline():
     """BATIND-01: battery_pct=3 produces non-white pixels (outline present, even without fill)."""
     img = _fresh_white()
     _draw(img, pct=3)
-    assert _nonwhite(img) > 0, "battery_pct=3 must draw an empty battery outline"
+    assert _nonwhite(img) > 0, 'battery_pct=3 must draw an empty battery outline'
 
 
 def test_flat_has_fewer_nonwhite_than_low():
     """D-02: flat state (no fill bar) has strictly fewer non-white pixels than low state."""
     img_low = _fresh_white()
     img_flat = _fresh_white()
-    _draw(img_low, pct=10)   # low: outline + partial fill
-    _draw(img_flat, pct=3)   # flat: outline only (no fill)
+    _draw(img_low, pct=10)  # low: outline + partial fill
+    _draw(img_flat, pct=3)  # flat: outline only (no fill)
     count_low = _nonwhite(img_low)
     count_flat = _nonwhite(img_flat)
-    assert count_flat < count_low, (
-        f"Flat state ({count_flat} non-white px) must be < low state ({count_low} non-white px)"
-    )
+    assert (
+        count_flat < count_low
+    ), f'Flat state ({count_flat} non-white px) must be < low state ({count_low} non-white px)'
 
 
 def test_position_differs():
@@ -114,16 +113,14 @@ def test_position_differs():
     img_br = _fresh_white()
     _draw(img_tl, pct=10, position_str='topLeft')
     _draw(img_br, pct=10, position_str='bottomRight')
-    assert img_tl.tobytes() != img_br.tobytes(), (
-        "topLeft and bottomRight positions must produce different images"
-    )
+    assert img_tl.tobytes() != img_br.tobytes(), 'topLeft and bottomRight positions must produce different images'
 
 
 def test_at_flat_threshold_boundary_draws():
     """battery_pct == 5 is the flat boundary -> empty outline drawn (non-white pixels present)."""
     img = _fresh_white()
     _draw(img, pct=5)
-    assert _nonwhite(img) > 0, "battery_pct=5 (flat boundary) must draw the empty outline"
+    assert _nonwhite(img) > 0, 'battery_pct=5 (flat boundary) must draw the empty outline'
 
 
 def test_zero_pct_draws_empty_outline():
@@ -135,4 +132,4 @@ def test_zero_pct_draws_empty_outline():
     # The plan specifies the guard is battery_pct > BATTERY_LOW_THRESHOLD -> return.
     # pct=0 is <= 5, so outline is drawn.
     _draw(img, pct=0)
-    assert _nonwhite(img) > 0, "battery_pct=0 (within draw range) must draw the empty outline"
+    assert _nonwhite(img) > 0, 'battery_pct=0 (within draw range) must draw the empty outline'

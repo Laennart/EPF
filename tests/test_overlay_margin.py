@@ -60,8 +60,8 @@ def test_positions_center_ignores_margins():
 def test_draw_overlay_signature_defaults():
     """MARGIN-02: draw_date_overlay() has margin_h=0 and margin_v=0 in its signature."""
     params = inspect.signature(draw_date_overlay).parameters
-    assert 'margin_h' in params, "draw_date_overlay missing margin_h parameter"
-    assert 'margin_v' in params, "draw_date_overlay missing margin_v parameter"
+    assert 'margin_h' in params, 'draw_date_overlay missing margin_h parameter'
+    assert 'margin_v' in params, 'draw_date_overlay missing margin_v parameter'
     assert params['margin_h'].default == 0, f"margin_h default should be 0, got {params['margin_h'].default}"
     assert params['margin_v'].default == 0, f"margin_v default should be 0, got {params['margin_v'].default}"
 
@@ -74,6 +74,6 @@ def test_draw_overlay_zero_margin_matches_omitted(dejavu_or_default_font):
     draw_date_overlay(img_a, '05.01.2022', dejavu_or_default_font, 'bottomRight', padding=6)
     draw_date_overlay(img_b, '05.01.2022', dejavu_or_default_font, 'bottomRight', padding=6, margin_h=0, margin_v=0)
 
-    assert list(img_a.getdata()) == list(img_b.getdata()), (
-        "Zero-margin output does not match omitted-margin output — backward compat broken"
-    )
+    assert list(img_a.getdata()) == list(
+        img_b.getdata()
+    ), 'Zero-margin output does not match omitted-margin output — backward compat broken'

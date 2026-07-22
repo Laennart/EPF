@@ -64,7 +64,7 @@ DEFAULT_CONFIG = {
         'blur_radius': 30,  # px, int — GaussianBlur radius for fit mode blurred background
         'overlay_margin_h': 0,  # D-02/D-08: horizontal passe-partout inset (px), int
         'overlay_margin_v': 0,  # D-02/D-08: vertical passe-partout inset (px), int
-        'battery_indicator_enabled': 'on',        # D-15/D-16: show low-battery icon; select on/off
+        'battery_indicator_enabled': 'on',  # D-15/D-16: show low-battery icon; select on/off
         'battery_indicator_position': 'topRight',  # D-08/D-09/D-16: POSITIONS key, default topRight
     }
 }
@@ -203,8 +203,8 @@ def parse_photo_location(local_image=None, immich_exif=None):
 
 
 # Battery indicator warning thresholds (percent). Hardcoded, not configurable (D-06).
-BATTERY_LOW_THRESHOLD = 20   # battery_pct <= this and > FLAT -> partial-fill warning icon
-BATTERY_FLAT_THRESHOLD = 5   # battery_pct <= this -> empty (flat) battery outline
+BATTERY_LOW_THRESHOLD = 20  # battery_pct <= this and > FLAT -> partial-fill warning icon
+BATTERY_FLAT_THRESHOLD = 5  # battery_pct <= this -> empty (flat) battery outline
 
 # 9-position anchor lookup for date overlay (DO-04).
 # Each lambda returns (x, y) of the text's top-left given image w/h, text bbox w/h,
@@ -341,10 +341,10 @@ def draw_battery_indicator(output_img, battery_pct, position_str, rotation, font
     # --- Step 1: Compute icon geometry from font_size (D-12, D-13) ---
     icon_h = int(font_size)
     body_w = icon_h * 2
-    nub_w = max(1, int(icon_h * 0.2))   # ~20% of height
-    nub_h = max(1, int(icon_h * 0.5))   # ~50% of height, vertically centered
-    stroke = 2                            # 2px stroke (D-13)
-    icon_w = body_w + nub_w              # total footprint including nub
+    nub_w = max(1, int(icon_h * 0.2))  # ~20% of height
+    nub_h = max(1, int(icon_h * 0.5))  # ~50% of height, vertically centered
+    stroke = 2  # 2px stroke (D-13)
+    icon_w = body_w + nub_w  # total footprint including nub
 
     # --- Step 2: Viewer canvas dims (mirror draw_date_overlay Step 1) ---
     bw, bh = output_img.size  # buffer dimensions (always 1200x1600)
@@ -750,11 +750,7 @@ def scale_img_in_memory(
     # Low-battery warning icon (BATIND-03/04; warning-only, D-05/D-19).
     # battery_pct comes from the live ADC voltage; 0 (USB/no data) suppresses the icon (D-07).
     if battery_indicator_enabled == 'on':
-        battery_pct = (
-            calculate_battery_percentage(last_battery_voltage)
-            if last_battery_voltage > 0
-            else 0
-        )
+        battery_pct = calculate_battery_percentage(last_battery_voltage) if last_battery_voltage > 0 else 0
         draw_battery_indicator(
             output_img,
             battery_pct,
