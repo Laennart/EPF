@@ -1269,13 +1269,29 @@ def serve_immich_image():
     if not albumid:
         return jsonify({'error': 'Album not found'}), 404
 
-    response = requests.get(f'{url}/api/albums/{albumid}', headers=headers)
-    if response.status_code != 200:
-        return jsonify({'error': 'Failed to fetch album details'}), 500
+    # Immich v3 breaking change: GET /api/albums/{id} no longer returns the
+    # 'assets' property. Album assets must be fetched via the paginated
+    # POST /api/search/metadata endpoint (filtered by albumIds) instead.
+    album_assets = []
+    page = 1
+    while True:
+        search_body = {'albumIds': [albumid], 'size': 1000, 'page': page, 'withExif': True}
+        response = requests.post(f'{current_url}/api/search/metadata', headers=headers, json=search_body)
+        if response.status_code != 200:
+            return jsonify({'error': 'Failed to fetch album details'}), 500
 
-    data = response.json()
-    if 'assets' not in data or not data['assets']:
+        search_result = response.json().get('assets', {})
+        album_assets.extend(search_result.get('items', []))
+
+        next_page = search_result.get('nextPage')
+        if not next_page:
+            break
+        page = int(next_page)
+
+    if not album_assets:
         return jsonify({'error': 'No images found in album'}), 404
+
+    data = {'assets': album_assets}
 
     current_image_order = current_config['immich']['image_order']
 
