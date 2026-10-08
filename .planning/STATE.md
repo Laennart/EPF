@@ -93,6 +93,21 @@ Phase 01 (hardware-port) completed all 3 plans:
 | 11-01 | TDD RED+GREEN: margin-aware POSITIONS lambdas + draw_date_overlay margin params | complete |
 | 11-02 | Config wiring, call site, and settings UI sliders | complete |
 
+## Phase 14 Plan Status
+
+| Plan | Name | Status |
+|------|------|--------|
+| 14-01 | TDD RED contract tests (PRE-01..PRE-12) | complete |
+| 14-02 | FramePrefetcher + RenderedFrame render functions | complete |
+| 14-03 | /download wiring, 202 on busy, config invalidation, startup warm | complete |
+
+Phase 14 decisions:
+- In-memory cache instead of temp files: a frame is ~1 MB, no /tmp cleanup needed (14-02)
+- One render lock for background and on-demand renders: no double pick or concurrent tracking-file writes (14-02)
+- Settings key captured at render start and re-checked before caching and before serving (14-02)
+- RenderedFrame.commit records the photo as shown at serve time; discarded pre-renders are never recorded (14-02)
+- /download returns 202 when a background render does not finish within PREFETCH_WAIT_SECONDS or produced nothing usable; firmware retries after RETRY_DELAY (14-03)
+
 ## Phase 9 Plan Status
 
 | Plan | Name | Status |

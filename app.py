@@ -34,6 +34,7 @@ import immich_client
 from image_decode import open_asset, open_preview
 from immich_client import ImmichError
 from local_rotation import load_shown, pick_next, save_shown
+from prefetch import BusyError, FramePrefetcher, RenderedFrame
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -983,6 +984,9 @@ def update_app_config(new_config):
         f'Configuration updated: URL = {url}, Album = {albumname}, angle = {rotationAngle}, enhance = {img_enhanced}, contrast = {img_contrast}, strength = {strength}, display_mode = {display_mode}, image_order = {image_order}'
     )
 
+    # Any settings change voids the prepared frame
+    frame_prefetcher.invalidate()
+
 
 def start_config_watcher(config_path):
     """Start configuration file monitoring"""
@@ -1206,6 +1210,9 @@ def main():
         ntp_sync_thread = threading.Thread(target=run_daily_ntp_sync, daemon=True)
         ntp_sync_thread.start()
 
+        # Prepare the first frame before the device asks for it
+        frame_prefetcher.start()
+
         # Run Flask application in a separate thread
         app.run(host='0.0.0.0', port=5000, use_reloader=False)
     except KeyboardInterrupt:
@@ -1226,30 +1233,54 @@ def open_image_from_path(filepath):
         return Image.open(filepath)
 
 
-def serve_local_image():
-    """Pick a not-yet-shown image from localdir, process it, and return a send_file response."""
-    if not os.path.isdir(localdir):
-        return jsonify({'error': f'Local photo directory not found: {localdir}'}), 500
+class RenderError(Exception):
+    """A frame could not be rendered; carries the status /download should report."""
 
-    candidates = [f for f in os.listdir(localdir) if os.path.splitext(f)[1].lower() in ALLOWED_EXTENSIONS]
+    def __init__(self, message, status=500):
+        super().__init__(message)
+        self.message = message
+        self.status = status
+
+
+def _local_candidates():
+    if not os.path.isdir(localdir):
+        return []
+    return [f for f in os.listdir(localdir) if os.path.splitext(f)[1].lower() in ALLOWED_EXTENSIONS]
+
+
+def image_source():
+    """'local' when local_photos/ holds an image, else 'immich' when an API key is set, else None."""
+    if _local_candidates():
+        return 'local'
+    if apikey:
+        return 'immich'
+    return None
+
+
+def _encode_frame(processed_image):
+    processed_image.seek(0)
+    return convert_to_binary_in_memory(Image.open(processed_image)).getvalue()
+
+
+def render_local_frame():
+    """Pick a not-yet-shown image from localdir and render it; recorded as shown on commit."""
+    candidates = _local_candidates()
     if not candidates:
-        return jsonify({'error': 'No supported images found in local directory'}), 404
+        raise RenderError('No supported images found in local directory', 404)
 
     filename, shown = pick_next(candidates, load_shown(local_tracking_file))
-    save_shown(local_tracking_file, shown)
-    filepath = os.path.join(localdir, filename)
-    image = open_image_from_path(filepath)
-
-    processed_image = scale_img_in_memory(image)
-    processed_image.seek(0)
-    frame = convert_to_binary_in_memory(Image.open(processed_image))
-
-    stem = os.path.splitext(filename)[0]
-    return send_file(
-        frame,
-        mimetype='application/octet-stream',
-        as_attachment=True,
-        download_name=f'image_{stem}.bin',
+    try:
+        image = open_image_from_path(os.path.join(localdir, filename))
+        data = _encode_frame(scale_img_in_memory(image))
+    except Exception:
+        # Unreadable: mark it shown so the next wake-up moves on instead of
+        # picking it again until it is the only one left, then failing forever.
+        save_shown(local_tracking_file, shown)
+        raise
+    return RenderedFrame(
+        data=data,
+        name=os.path.splitext(filename)[0],
+        commit=lambda: save_shown(local_tracking_file, shown),
     )
 
 
@@ -1300,47 +1331,58 @@ def decode_immich_asset(asset, deadline):
             raise error from None
 
 
-def serve_immich_image():
-    """Pick an image from Immich, process it, and return a send_file response."""
+def render_immich_frame():
+    """Pick an image from Immich and render it; recorded as shown on commit."""
     if not url or not albumname:
-        return jsonify({'error': 'Immich URL or Album not configured'}), 500
+        raise RenderError('Immich URL or Album not configured', 500)
 
     deadline = immich_client.new_deadline()
+    album_id = immich_client.resolve_album_id(url, headers, albumname, deadline=deadline)
+    selected_image = select_immich_asset(immich_client.list_album_assets(url, headers, album_id, deadline=deadline))
+    asset_id = selected_image['id']
+    exif = selected_image.get('exifInfo') or {}
     try:
-        album_id = immich_client.resolve_album_id(url, headers, albumname, deadline=deadline)
-        selected_image = select_immich_asset(immich_client.list_album_assets(url, headers, album_id, deadline=deadline))
-        asset_id = selected_image['id']
-        try:
-            image = decode_immich_asset(selected_image, deadline)
-        except ImmichError:
-            raise
-        except Exception:
-            # Neither the original nor the preview decodes: mark it shown so the
-            # next wake-up moves on instead of failing on it forever ('newest').
-            save_downloaded_image(asset_id)
-            raise
-    except ImmichError as error:
-        print(f'[ERROR] Immich: {error.message}')
-        return jsonify({'error': error.message}), error.status
+        image = decode_immich_asset(selected_image, deadline)
+        data = _encode_frame(
+            scale_img_in_memory(image, immich_date_raw=exif.get('dateTimeOriginal'), immich_exif_raw=exif)
+        )
+    except ImmichError:
+        # Transport failure: not recorded, so the photo is tried again
+        raise
+    except Exception:
+        # Neither the original nor the preview decodes, or it does not render:
+        # mark it shown so the next wake-up moves on instead of failing on it
+        # forever ('newest').
+        save_downloaded_image(asset_id)
+        raise
+    return RenderedFrame(data=data, name=asset_id, commit=lambda: save_downloaded_image(asset_id))
 
-    # Recorded only once decoded, so a transport failure is retried rather than skipped
-    save_downloaded_image(asset_id)
 
-    immich_date_raw = selected_image.get('exifInfo', {}).get('dateTimeOriginal')
-    processed_image = scale_img_in_memory(
-        image,
-        immich_date_raw=immich_date_raw,
-        immich_exif_raw=selected_image.get('exifInfo', {}),
-    )
-    processed_image.seek(0)
-    frame = convert_to_binary_in_memory(Image.open(processed_image))
+def render_next_frame():
+    """Render the next frame from whichever source is active."""
+    source = image_source()
+    if source == 'local':
+        return render_local_frame()
+    if source == 'immich':
+        return render_immich_frame()
+    raise RenderError('No image source configured. Add images to local_photos/ or set IMMICH_API_KEY.', 500)
 
-    return send_file(
-        frame,
-        mimetype='application/octet-stream',
-        as_attachment=True,
-        download_name=f'image_{asset_id}.bin',
-    )
+
+def render_settings_key():
+    """Everything a prepared frame depends on; it is served only while this is unchanged.
+
+    The battery indicator is drawn from the last reported voltage, so a prepared
+    frame shows the reading from one check-in earlier.
+    """
+    return (image_source(), url, albumname, json.dumps(current_config, sort_keys=True, default=str))
+
+
+# Longest /download waits for a background render before asking the frame to
+# retry (202, which the firmware retries RETRY_DELAY later). Stays well under
+# the firmware's 50 s HTTP_TIMEOUT.
+PREFETCH_WAIT_SECONDS = 30
+
+frame_prefetcher = FramePrefetcher(render_next_frame, render_settings_key)
 
 
 @app.route('/download', methods=['GET'])
@@ -1359,22 +1401,22 @@ def process_and_download():
         pass
 
     try:
-        # Local folder takes priority when it contains at least one image.
-        # Fall back to Immich when IMMICH_API_KEY is present.
-        local_has_images = os.path.isdir(localdir) and any(
-            os.path.splitext(f)[1].lower() in ALLOWED_EXTENSIONS for f in os.listdir(localdir)
-        )
-        if local_has_images:
-            return serve_local_image()
-        elif apikey:
-            return serve_immich_image()
-        else:
-            return jsonify(
-                {'error': 'No image source configured. Add images to local_photos/ or set IMMICH_API_KEY.'}
-            ), 500
-
+        frame = frame_prefetcher.take(wait=PREFETCH_WAIT_SECONDS)
+    except BusyError:
+        return jsonify({'status': 'Preparing the next photo, retry shortly'}), 202
+    except (ImmichError, RenderError) as error:
+        print(f'[ERROR] /download: {error.message}')
+        return jsonify({'error': error.message}), error.status
     except Exception as e:
+        print(f'[ERROR] /download: {e}')
         return jsonify({'error': str(e)}), 500
+
+    return send_file(
+        io.BytesIO(frame.data),
+        mimetype='application/octet-stream',
+        as_attachment=True,
+        download_name=f'image_{frame.name}.bin',
+    )
 
 
 @app.route('/sleep', methods=['GET'])

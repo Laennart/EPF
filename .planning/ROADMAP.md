@@ -184,6 +184,21 @@ Plans:
 - [x] 13-01-PLAN.md — Wave 1 (TDD): draw_battery_indicator() + BATTERY_LOW/FLAT_THRESHOLD constants + tests/test_battery_indicator.py (BATIND-01..03)
 - [ ] 13-02-PLAN.md — Wave 2: wire battery_indicator_enabled/position through config + scale_img_in_memory call site + settings.html card + human-verify (BATIND-04, BATIND-05)
 
+### Phase 14: Image pre-fetch — background worker for zero-wait /download
+
+**Goal:** Eliminate /download latency by rendering the next frame in a background thread after each hand-over, at startup, and after a settings change. Originally drafted as phase 09 with a temp-file design; reworked on top of the Immich robustness fixes: logic lives in prefetch.FramePrefetcher; one render lock covers choose-and-render for both the background thread and on-demand /download; the frame is cached in memory with the settings key it was rendered under and served only while that key matches; a photo is recorded as shown only when served; /download answers 202 (firmware retries) instead of waiting past PREFETCH_WAIT_SECONDS for a running render.
+
+**Requirements:** PRE-01..PRE-12
+
+**Depends on:** Phase 13
+
+**Plans:** 3/3 plans complete
+
+Work (no separate plan docs; the design is documented in prefetch.py and the tests):
+- [x] TDD contract tests: tests/test_prefetch.py (PRE-01..PRE-12), tests/test_prefetch_download.py
+- [x] prefetch.FramePrefetcher + render_local_frame/render_immich_frame returning RenderedFrame
+- [x] /download take() path with 202 on busy, config invalidation hook, startup warm in main()
+
 ## Backlog
 
 ### Phase 999.2: Dithered grey overlays — simulate grey on e-paper via pre-dithering (BACKLOG)

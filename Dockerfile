@@ -36,6 +36,10 @@ ENV IMMICH_PHOTO_DEST=/data/photos \
     LOCAL_PHOTO_DIR=/data/local_photos \
     CONFIG_FILE=/data/config/config.yaml
 
+# Without a TTY, print() output sits in a block buffer and reaches
+# `docker logs` late or never (lost on SIGTERM); write it out at once.
+ENV PYTHONUNBUFFERED=1
+
 EXPOSE 5000
 
 CMD ["python", "app.py"]

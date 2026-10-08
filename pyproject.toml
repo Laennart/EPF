@@ -18,6 +18,6 @@ indent-style = "space"
 # D-02: cpy.pyx excluded — pyright cannot type-check Cython.
 typeCheckingMode = "basic"
 pythonVersion = "3.9"
-include = ["app.py", "cpy_fallback.py", "immich_client.py", "image_decode.py"]
+include = ["app.py", "cpy_fallback.py", "immich_client.py", "image_decode.py", "prefetch.py"]
 exclude = ["cpy.pyx", "cpy.c", "**/__pycache__", "tests/conftest.py"]
 reportMissingImports = "warning"
