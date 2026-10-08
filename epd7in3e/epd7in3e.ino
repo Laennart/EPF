@@ -93,6 +93,7 @@ private:
     bool success = false;
     int sleepDuration = 0;
     bool retryOnError = true; // Add retry flag
+    bool retriedOnError = false; // A 500 is retried only once
 
     while (retryOnError && !success)
     {                       // Add retry loop
@@ -197,10 +198,18 @@ private:
         }
         else if (httpCode == HTTP_CODE_INTERNAL_SERVER_ERROR)
         {
-          Serial.println("Server error (500), will retry once...");
-          delay(RETRY_DELAY);
-          retryOnError = true; // Enable one retry on 500 error
-          break;               // Exit current retry loop
+          if (!retriedOnError)
+          {
+            Serial.println("Server error (500), will retry once...");
+            delay(RETRY_DELAY);
+            retryOnError = true;   // Enable one retry on 500 error
+            retriedOnError = true;
+          }
+          else
+          {
+            Serial.println("Server error (500) again, giving up");
+          }
+          break; // Exit current retry loop
         }
         else
         {
