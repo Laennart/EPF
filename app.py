@@ -10,7 +10,6 @@ from functools import wraps
 
 import numpy as np
 import rawpy
-import requests
 import yaml
 from dotenv import load_dotenv
 from flask import Flask, jsonify, make_response, redirect, render_template, request, send_file, url_for
@@ -31,6 +30,9 @@ import time
 
 import ntplib
 
+import immich_client
+from image_decode import open_asset, open_preview
+from immich_client import ImmichError
 from local_rotation import load_shown, pick_next, save_shown
 
 load_dotenv()  # Load environment variables from .env file
@@ -1251,98 +1253,78 @@ def serve_local_image():
     )
 
 
-def serve_immich_image():
-    """Pick an image from Immich, process it, and return a send_file response."""
-    current_url = url
-    current_albumname = albumname
+def _taken_at(asset):
+    # 'or': Immich sends dateTimeOriginal: null for photos without an EXIF date
+    return (asset.get('exifInfo') or {}).get('dateTimeOriginal') or '1970-01-01T00:00:00'
 
-    if not current_url or not current_albumname:
-        return jsonify({'error': 'Immich URL or Album not configured'}), 500
 
+def select_immich_asset(assets):
+    """Choose the next asset per image_order, honouring and maintaining tracking.txt."""
     downloaded_images = load_downloaded_images()
 
-    response = requests.get(f'{current_url}/api/albums', headers=headers, params={'withoutAssets': 'true'})
-    if response.status_code != 200:
-        print(f'[ERROR] GET /api/albums → HTTP {response.status_code}: {response.text[:500]}')
-        return jsonify(
-            {'error': 'Failed to fetch albums', 'status': response.status_code, 'detail': response.text[:500]}
-        ), 500
-
-    data = response.json()
-    albumid = next((item['id'] for item in data if item['albumName'] == current_albumname), None)
-    if not albumid:
-        return jsonify({'error': 'Album not found'}), 404
-
-    # Immich v3 breaking change: GET /api/albums/{id} no longer returns the
-    # 'assets' property. Album assets must be fetched via the paginated
-    # POST /api/search/metadata endpoint (filtered by albumIds) instead.
-    album_assets = []
-    page = 1
-    while True:
-        search_body = {'albumIds': [albumid], 'size': 1000, 'page': page, 'withExif': True}
-        response = requests.post(f'{current_url}/api/search/metadata', headers=headers, json=search_body)
-        if response.status_code != 200:
-            return jsonify({'error': 'Failed to fetch album details'}), 500
-
-        search_result = response.json().get('assets', {})
-        album_assets.extend(search_result.get('items', []))
-
-        next_page = search_result.get('nextPage')
-        if not next_page:
-            break
-        page = int(next_page)
-
-    if not album_assets:
-        return jsonify({'error': 'No images found in album'}), 404
-
-    data = {'assets': album_assets}
-
-    current_image_order = current_config['immich']['image_order']
-
-    if current_image_order == 'newest':
-        latest_photo = max(
-            data['assets'], key=lambda x: x.get('exifInfo', {}).get('dateTimeOriginal', '1970-01-01T00:00:00')
-        )
-        latest_id = latest_photo['id']
-
-        downloaded_images = load_downloaded_images()
-        if not downloaded_images or latest_id not in downloaded_images:
-            reset_tracking_file()
-            sorted_assets = sorted(
-                data['assets'],
-                key=lambda x: x.get('exifInfo', {}).get('dateTimeOriginal', '1970-01-01T00:00:00'),
-                reverse=True,
-            )
-            remaining_images = sorted_assets
+    if current_config['immich']['image_order'] == 'newest':
+        latest_id = max(assets, key=_taken_at)['id']
+        if latest_id in downloaded_images:
+            remaining = [a for a in assets if a['id'] not in downloaded_images]
         else:
-            remaining_images = [img for img in data['assets'] if img['id'] not in downloaded_images]
-            remaining_images.sort(
-                key=lambda x: x.get('exifInfo', {}).get('dateTimeOriginal', '1970-01-01T00:00:00'), reverse=True
-            )
-    else:  # random order
-        remaining_images = [img for img in data['assets'] if img['id'] not in downloaded_images]
-        if not remaining_images:
+            # A newer photo turned up: start over from the newest
             reset_tracking_file()
-            remaining_images = data['assets']
+            remaining = []
+        if not remaining:
+            # Everything shown and nothing newer: start over rather than index an empty list
+            reset_tracking_file()
+            remaining = assets
+        return sorted(remaining, key=_taken_at, reverse=True)[0]
 
-    selected_image = remaining_images[0] if current_image_order == 'newest' else random.choice(remaining_images)
-    asset_id = selected_image['id']
+    remaining = [a for a in assets if a['id'] not in downloaded_images]
+    if not remaining:
+        reset_tracking_file()
+        remaining = assets
+    return random.choice(remaining)
+
+
+def decode_immich_asset(asset, deadline):
+    """Download and decode an asset, falling back to Immich's preview if the original is unreadable."""
+    asset_id = asset['id']
+    original = immich_client.fetch_original(url, headers, asset_id, deadline=deadline)
+    try:
+        return open_asset(io.BytesIO(original), asset.get('originalPath'))
+    except Exception as error:
+        # AVIF, JPEG XL or a damaged file: the preview is always JPEG/WebP and
+        # still larger than the panel, and a photo beats an empty wake-up.
+        print(f'[WARN] Original of {asset_id} unreadable, using the preview: {error}')
+        try:
+            return open_preview(io.BytesIO(immich_client.fetch_preview(url, headers, asset_id, deadline=deadline)))
+        except Exception:
+            # Report why the original failed, which is the actual problem
+            raise error from None
+
+
+def serve_immich_image():
+    """Pick an image from Immich, process it, and return a send_file response."""
+    if not url or not albumname:
+        return jsonify({'error': 'Immich URL or Album not configured'}), 500
+
+    deadline = immich_client.new_deadline()
+    try:
+        album_id = immich_client.resolve_album_id(url, headers, albumname, deadline=deadline)
+        selected_image = select_immich_asset(immich_client.list_album_assets(url, headers, album_id, deadline=deadline))
+        asset_id = selected_image['id']
+        try:
+            image = decode_immich_asset(selected_image, deadline)
+        except ImmichError:
+            raise
+        except Exception:
+            # Neither the original nor the preview decodes: mark it shown so the
+            # next wake-up moves on instead of failing on it forever ('newest').
+            save_downloaded_image(asset_id)
+            raise
+    except ImmichError as error:
+        print(f'[ERROR] Immich: {error.message}')
+        return jsonify({'error': error.message}), error.status
+
+    # Recorded only once decoded, so a transport failure is retried rather than skipped
     save_downloaded_image(asset_id)
-
-    print(f'{url}/api/assets/{asset_id}/original')
-    response = requests.get(f'{url}/api/assets/{asset_id}/original', headers=headers, stream=True)
-    if response.status_code != 200:
-        return jsonify({'error': 'Failed to download image'}), 500
-
-    image_data = io.BytesIO(response.content)
-    if selected_image['originalPath'].lower().endswith(('.raw', '.dng', '.arw', '.cr2', '.nef')):
-        with rawpy.imread(image_data) as raw:
-            rgb = raw.postprocess(use_camera_wb=True, use_auto_wb=False)
-            image = Image.fromarray(rgb)
-    elif selected_image['originalPath'].lower().endswith('.heic'):
-        image = Image.open(image_data).convert('RGB')
-    else:
-        image = Image.open(image_data)
 
     immich_date_raw = selected_image.get('exifInfo', {}).get('dateTimeOriginal')
     processed_image = scale_img_in_memory(

@@ -1,0 +1,45 @@
+# The Dockerfile copies the whole build context (COPY . .), so anything not
+# listed here ends up in the image. Keep secrets, runtime data and everything
+# the server does not need at runtime out of it.
+
+# Secrets
+.env
+.env.*
+!.env.example
+epd7in3e/secrets.h
+
+# Runtime data (bind-mounted in compose.yml, never baked in)
+config/
+config.yaml
+photos/
+local_photos/
+geo_cache.json
+test-images/
+
+# Firmware, hardware and docs
+epd7in3e/
+CAD/
+*.pdf
+README*.md
+CLAUDE.md
+
+# Tooling, history and local state
+.git/
+.github/
+.claude/
+.planning/
+.vscode/
+.venv/
+venv/
+scratchpad/
+tests/
+requirements-dev.txt
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+
+# Build output (the image compiles cpy.pyx itself)
+*.so
+*.c
