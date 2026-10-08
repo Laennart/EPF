@@ -11,9 +11,11 @@ PRE-08: Only one choose-and-render runs at a time (background vs on demand)
 PRE-09: Only one background thread at a time
 PRE-10: A frame rendered with settings that changed meanwhile is never served
 PRE-11: A photo is recorded as shown only when its frame is served
-PRE-12: take() raises BusyError instead of waiting past its limit
+PRE-12: take() raises BusyError instead of waiting past its limit, and reports
+        the error of a background render it waited on (no 202 retry loop)
 """
 
+import sys
 import threading
 import time
 
@@ -184,15 +186,52 @@ def test_busy_when_background_render_outlasts_wait(prefetcher, source):
     source.gate.set()
 
 
-def test_busy_when_waited_render_failed(prefetcher, source):
-    """PRE-12: after waiting on a background render that failed, take() asks the frame to come back."""
+def test_waited_render_failure_is_reported(prefetcher, source):
+    """PRE-12: a background render that failed while take() waited reports its error, not a 202."""
     source.gate = threading.Event()
     source.fail = True
     prefetcher.start()
     assert source.started.wait(timeout=1)
     threading.Timer(0.1, source.gate.set).start()
-    with pytest.raises(BusyError):
+    with pytest.raises(RuntimeError, match='render failed'):
         prefetcher.take(wait=2)
+    _settle(prefetcher)
+    # No new background render: the frame would only wait on it again (202 loop)
+    assert len(source.renders) == 1
+
+
+def test_failing_renders_do_not_loop_202(prefetcher, source):
+    """Firmware retries on 202; renders that keep failing must surface an error, not 202 every time."""
+    source.fail = True
+    source.gate = threading.Event()
+    prefetcher.start()
+    assert source.started.wait(timeout=1)
+    threading.Timer(0.05, source.gate.set).start()
+    outcomes = []
+    for _ in range(5):  # MAX_RETRIES in the firmware
+        try:
+            prefetcher.take(wait=1)
+            outcomes.append(200)
+            break
+        except BusyError:
+            outcomes.append(202)
+        except RuntimeError:
+            outcomes.append(500)
+            break
+    assert outcomes == [500]
+
+
+def test_background_error_reported_once(prefetcher, source):
+    """A background failure is reported to the take() that waited on it only; the next one renders afresh."""
+    source.gate = threading.Event()
+    source.fail = True
+    prefetcher.start()
+    assert source.started.wait(timeout=1)
+    threading.Timer(0.1, source.gate.set).start()
+    with pytest.raises(RuntimeError):
+        prefetcher.take(wait=2)
+    source.fail = False
+    assert prefetcher.take(wait=1).name == 'frame1'
 
 
 def test_single_background_thread(prefetcher, source):
@@ -240,16 +279,44 @@ def test_key_failure_does_not_kill_background_thread(source):
     assert source.renders, 'background rendering never recovered'
 
 
-def test_busy_after_failed_wait_schedules_next_prefetch(prefetcher, source):
-    """After a 202 because the awaited render failed, a new background render is started."""
-    source.gate = threading.Event()
-    source.fail = True
+class _PauseWorkerAtExit:
+    """A state lock that holds the first worker thread right after its second _work-level critical
+    section, i.e. after it decided whether to loop again. Lets a test land a trigger() in that window."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.worker = None
+        self.exits = 0
+        self.paused = threading.Event()
+        self.resume = threading.Event()
+
+    def __enter__(self):
+        self._lock.acquire()
+
+    def __exit__(self, *exc):
+        self._lock.release()
+        frame = sys._getframe(1)
+        if frame.f_code.co_name != '_work':
+            return
+        if self.worker is None:
+            self.worker = threading.current_thread()
+        if threading.current_thread() is self.worker:
+            self.exits += 1
+            if self.exits == 2:
+                self.paused.set()
+                self.resume.wait(timeout=2)
+
+
+def test_trigger_while_worker_exits_is_not_lost(prefetcher, source):
+    """PRE-06: an invalidate() landing as the background thread finishes still prepares a new frame."""
+    lock = _PauseWorkerAtExit()
+    prefetcher._state_lock = lock
     prefetcher.start()
-    assert source.started.wait(timeout=1)
-    threading.Timer(0.1, source.gate.set).start()
-    with pytest.raises(BusyError):
-        prefetcher.take(wait=2)
-    source.fail = False
-    source.gate = None
+    assert lock.paused.wait(timeout=2)
+    assert source.renders == ['v1']
+    prefetcher.invalidate()
+    lock.resume.set()
+    lock.worker.join(timeout=2)
     _settle(prefetcher)
     assert len(source.renders) == 2
+    assert prefetcher.take(wait=1).name == 'frame1'

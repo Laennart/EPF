@@ -14,6 +14,9 @@ Rules that keep it correct:
   never served even if the key was already updated when the render began.
 - A photo is recorded as shown (RenderedFrame.commit) only when served, so a
   discarded pre-render does not skip it.
+- A /download that waited on a background render which failed reports that
+  failure instead of asking the device to retry, so a source that keeps
+  failing ends in an error rather than a 202 on every retry.
 """
 
 import threading
@@ -41,6 +44,7 @@ class FramePrefetcher:
         self._state_lock = threading.Lock()
         self._cached = None  # (settings key, RenderedFrame)
         self._generation = 0  # bumped by invalidate(); a render from an older one is discarded
+        self._failure = None  # error of the last background render; read and written under render_lock
         self._thread = None
         self._rerun = False
         self._enabled = False
@@ -82,9 +86,10 @@ class FramePrefetcher:
 
         Serves the prepared frame if it is still valid, otherwise renders on
         demand. If a background render is running, waits up to `wait` seconds
-        for it; raises BusyError if it does not finish in time or produced nothing
-        usable, so the device retries with a fresh request timeout instead of
-        this request also paying for an on-demand render.
+        for it; raises BusyError if it does not finish in time or its frame went
+        stale, so the device retries with a fresh request timeout instead of
+        this request also paying for an on-demand render. If the awaited render
+        failed, its error is raised instead.
         """
         waited = False
         if not self._render_lock.acquire(blocking=False):
@@ -92,14 +97,18 @@ class FramePrefetcher:
             if not self._render_lock.acquire(timeout=wait):
                 raise BusyError()
         try:
+            failure, self._failure = self._failure, None
             frame = self._pop_valid()
             if frame is None:
+                if waited and failure is not None:
+                    # Retrying would only wait on the next attempt and fail again
+                    raise failure
                 if waited:
                     raise BusyError()
                 frame = self._render()
             frame.commit()
         except BusyError:
-            # The awaited render failed or went stale: start another for the retry
+            # The awaited render went stale: start another for the retry
             self._render_lock.release()
             self.trigger()
             raise
@@ -134,21 +143,29 @@ class FramePrefetcher:
             while True:
                 with self._state_lock:
                     self._rerun = False
-                try:
-                    with self._render_lock:
+                with self._render_lock:
+                    self._failure = None
+                    try:
                         if not self._has_valid_cache():
                             self._render_into_cache()
-                except Exception as error:  # noqa: BLE001 — a background thread must not die silently
-                    # No retry: the next hand-over or settings change tries again.
-                    print(f'[prefetch] WARN: preparing the next frame failed: {error}')
+                    except Exception as error:  # noqa: BLE001 — a background thread must not die silently
+                        # Kept under render_lock so a take() waiting on this render sees it.
+                        # No retry: the next hand-over or settings change tries again.
+                        self._failure = error
+                        print(f'[prefetch] WARN: preparing the next frame failed: {error}')
                 with self._state_lock:
                     if not self._rerun:
+                        # Cleared in the same critical section as the rerun check, or a
+                        # trigger() landing in between would see a live thread and be lost.
+                        self._thread = None
                         return
         finally:
             # Always clear the handle, or every later trigger() would think a
             # thread is still running and background rendering would stop for good.
+            # Only our own: trigger() may already have started a successor.
             with self._state_lock:
-                self._thread = None
+                if self._thread is threading.current_thread():
+                    self._thread = None
 
     def _render_into_cache(self):
         with self._state_lock:

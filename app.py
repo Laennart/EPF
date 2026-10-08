@@ -1269,8 +1269,14 @@ def render_local_frame():
         raise RenderError('No supported images found in local directory', 404)
 
     filename, shown = pick_next(candidates, load_shown(local_tracking_file))
-    image = open_image_from_path(os.path.join(localdir, filename))
-    data = _encode_frame(scale_img_in_memory(image))
+    try:
+        image = open_image_from_path(os.path.join(localdir, filename))
+        data = _encode_frame(scale_img_in_memory(image))
+    except Exception:
+        # Unreadable: mark it shown so the next wake-up moves on instead of
+        # picking it again until it is the only one left, then failing forever.
+        save_shown(local_tracking_file, shown)
+        raise
     return RenderedFrame(
         data=data,
         name=os.path.splitext(filename)[0],
@@ -1334,19 +1340,21 @@ def render_immich_frame():
     album_id = immich_client.resolve_album_id(url, headers, albumname, deadline=deadline)
     selected_image = select_immich_asset(immich_client.list_album_assets(url, headers, album_id, deadline=deadline))
     asset_id = selected_image['id']
+    exif = selected_image.get('exifInfo') or {}
     try:
         image = decode_immich_asset(selected_image, deadline)
+        data = _encode_frame(
+            scale_img_in_memory(image, immich_date_raw=exif.get('dateTimeOriginal'), immich_exif_raw=exif)
+        )
     except ImmichError:
         # Transport failure: not recorded, so the photo is tried again
         raise
     except Exception:
-        # Neither the original nor the preview decodes: mark it shown so the
-        # next wake-up moves on instead of failing on it forever ('newest').
+        # Neither the original nor the preview decodes, or it does not render:
+        # mark it shown so the next wake-up moves on instead of failing on it
+        # forever ('newest').
         save_downloaded_image(asset_id)
         raise
-
-    exif = selected_image.get('exifInfo') or {}
-    data = _encode_frame(scale_img_in_memory(image, immich_date_raw=exif.get('dateTimeOriginal'), immich_exif_raw=exif))
     return RenderedFrame(data=data, name=asset_id, commit=lambda: save_downloaded_image(asset_id))
 
 

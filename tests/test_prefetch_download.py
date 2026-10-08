@@ -118,3 +118,44 @@ def test_prepared_immich_frame_not_recorded_until_served(tmp_path, monkeypatch):
     assert app_module.load_downloaded_images() == set()
     frame.commit()
     assert app_module.load_downloaded_images() == {'only'}
+
+
+def test_unreadable_local_photo_is_recorded_so_the_next_wake_moves_on(tmp_path, monkeypatch):
+    """A local photo that cannot be opened is marked shown, else it would be picked forever."""
+    photos = tmp_path / 'local'
+    photos.mkdir()
+    Image.new('RGB', (40, 30)).save(photos / 'good.jpg')
+    (photos / 'bad.jpg').write_bytes(b'not a jpeg')
+    tracking = tmp_path / 'local_tracking.txt'
+    tracking.write_text('good.jpg\n')
+    monkeypatch.setattr(app_module, 'localdir', str(photos))
+    monkeypatch.setattr(app_module, 'local_tracking_file', str(tracking))
+
+    with pytest.raises(Exception):
+        app_module.render_local_frame()
+    assert 'bad.jpg' in tracking.read_text().split()
+
+
+def test_immich_photo_failing_to_render_is_recorded(tmp_path, monkeypatch):
+    """A decoded Immich photo that fails to scale is marked shown, so 'newest' does not stick on it."""
+    buf = io.BytesIO()
+    Image.new('RGB', (40, 30)).save(buf, format='JPEG')
+    monkeypatch.setattr(app_module, 'tracking_file', str(tmp_path / 'tracking.txt'))
+    monkeypatch.setattr(app_module, 'url', 'http://immich.local')
+    monkeypatch.setattr(app_module, 'albumname', 'Frame')
+    monkeypatch.setattr(app_module.immich_client, 'resolve_album_id', lambda *a, **k: 'a1')
+    monkeypatch.setattr(
+        app_module.immich_client,
+        'list_album_assets',
+        lambda *a, **k: [{'id': 'only', 'originalPath': 'x.jpg', 'exifInfo': {}}],
+    )
+    monkeypatch.setattr(app_module.immich_client, 'fetch_original', lambda *a, **k: buf.getvalue())
+
+    def broken_scale(image, **kwargs):
+        raise ValueError('cannot scale')
+
+    monkeypatch.setattr(app_module, 'scale_img_in_memory', broken_scale)
+
+    with pytest.raises(ValueError):
+        app_module.render_immich_frame()
+    assert app_module.load_downloaded_images() == {'only'}
